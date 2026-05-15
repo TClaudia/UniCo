@@ -5,12 +5,32 @@ const BASE_SYSTEM_PROMPT = `Ești "UniCredit AI Coach", un consilier financiar p
 Personalitate: caldă, motivantă, directă, educativă. Limbaj accesibil, nu jargon bancar excesiv. Ești ca un prieten care știe finanțe.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGULA CONVERSAȚIEI — FOARTE IMPORTANT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Conversația urmează DOUĂ FAZE:
+
+FAZA 1 — EXPLORARE (primele 3-4 schimburi):
+- Pune întrebări deschise pentru a înțelege situația utilizatorului în profunzime
+- Explorează: situația actuală, obiectivele concrete, orizontul de timp, experiența financiară, îngrijorările principale
+- NU recomanda produse în această fază — doar ascultă și aprofundează
+- Fiecare răspuns trebuie să conțină o întrebare de follow-up relevantă
+- Exemple de întrebări: "Ce anume te-a determinat să te gândești la asta acum?", "Ai mai economisit înainte sau e prima dată?", "Care e termenul la care vrei să atingi obiectivul?", "Ce te preocupă cel mai mult în legătură cu finanțele tale?"
+- În FAZA 1: "recommended_product": null, "product_cta": null, "disclaimer_required": false
+
+FAZA 2 — SOLUȚII (după cel puțin 3-4 întrebări):
+- Abia după ce ai înțeles bine situația, oferă sfaturi personalizate și recomandă produse dacă e cazul
+- Justifică recomandarea în raport cu ce ai aflat în conversație
+- Poți trece în FAZA 2 dacă: ai primit răspunsuri la cel puțin 3 întrebări SAU utilizatorul cere explicit o recomandare
+
+NUMĂRARE: Analizează istoricul conversației. Dacă sunt mai puțin de 3 mesaje de la utilizator, ești în FAZA 1.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORMAT RĂSPUNS — OBLIGATORIU JSON PUR
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Răspunzi EXCLUSIV în JSON valid, fără text înainte/după, fără markdown.
 
 {
-  "reply": "mesajul tău în română (max 150 cuvinte, conversațional)",
+  "reply": "mesajul tău în română (max 150 cuvinte, conversațional, include o întrebare în FAZA 1)",
   "avatar_emotion": "happy|thinking|concerned|enthusiastic|celebrating|informative",
   "recommended_product": "credit_realizari_personale|credit_imobiliar|depozit_lei|depozit_euro|onemarkets_fonduri|unicreditcard|null",
   "product_cta": {
@@ -32,7 +52,7 @@ Dacă nu recomanzi produs: "recommended_product": null, "product_cta": null, "di
 EMOȚII AVATAR
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - "happy"        → salut, răspunsuri pozitive, general
-- "thinking"     → analiză complexă, calcule, comparații
+- "thinking"     → analiză complexă, calcule, comparații, întrebări de explorare
 - "concerned"    → economii 0, venituri mici vs obiective mari
 - "enthusiastic" → profil bun, potrivire excelentă produs
 - "celebrating"  → milestone, trivia corect, streak
@@ -150,67 +170,103 @@ async function callGemini(
 }
 
 // Keyword-based mock for when no API key is set
-function getMockResponse(lastMessage: string): LLMResponse {
+function getMockResponse(lastMessage: string, messageCount: number): LLMResponse {
   const lower = lastMessage.toLowerCase()
+  const isExplorationPhase = messageCount < 3
 
+  // In exploration phase, ask follow-up questions instead of recommending products
+  if (isExplorationPhase) {
+    const explorationReplies: Record<string, LLMResponse> = {
+      savings: {
+        reply: 'Interesant! Când te gândești la economii, ce anume te motivează cel mai mult — siguranța unui fond de urgență, sau mai degrabă un obiectiv concret pe care vrei să-l atingi? Și ai mai economisit cu regularitate în trecut?',
+        avatar_emotion: 'thinking',
+        recommended_product: null, product_cta: null, disclaimer_required: false,
+        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'exploration' },
+      },
+      invest: {
+        reply: 'Bine că te gândești la investiții! Ca să înțeleg mai bine situația ta — pe ce perioadă de timp ai vrea să investești, și cum te-ai simți dacă valoarea investiției ar scădea temporar cu 10-15%? Toleranța la risc contează enorm.',
+        avatar_emotion: 'thinking',
+        recommended_product: null, product_cta: null, disclaimer_required: false,
+        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'exploration' },
+      },
+      credit: {
+        reply: 'Înțeleg că te gândești la un credit. Înainte să îți ofer sugestii, ar fi util să știu: pentru ce anume ai nevoie de finanțare și în ce interval de timp plănuiești să faci această achiziție?',
+        avatar_emotion: 'thinking',
+        recommended_product: null, product_cta: null, disclaimer_required: false,
+        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'exploration' },
+      },
+    }
+    if (lower.includes('economii') || lower.includes('economis') || lower.includes('depozit')) return explorationReplies.savings
+    if (lower.includes('invest') || lower.includes('fond') || lower.includes('portofoliu')) return explorationReplies.invest
+    if (lower.includes('credit') || lower.includes('împrumut') || lower.includes('imprumut') || lower.includes('casă') || lower.includes('casa')) return explorationReplies.credit
+
+    return {
+      reply: 'Bun venit! Sunt aici să te ajut să-ți clarifici situația financiară. Hai să pornim de la început — ce te aduce astăzi la o discuție despre finanțele tale? Ce anume te preocupă sau vrei să îmbunătățești?',
+      avatar_emotion: 'happy',
+      recommended_product: null, product_cta: null, disclaimer_required: false,
+      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'exploration_start' },
+    }
+  }
+
+  // After exploration phase, offer concrete recommendations
   if (lower.includes('economii') || lower.includes('economis') || lower.includes('depozit')) {
     return {
-      reply: 'Economisirea regulată este fundamentul sănătății financiare! Recomand regula 50/30/20: 50% nevoi, 30% dorințe, 20% economii. UniCredit oferă Depozite la Termen cu dobânzi competitive — o opțiune sigură pentru a-ți crește fondurile. Recomandarea are caracter informativ.',
+      reply: 'Pe baza a ceea ce mi-ai spus, cred că un Depozit la Termen ar fi un bun punct de start — dobândă garantată, fără risc. Regula 50/30/20 funcționează bine: 50% nevoi, 30% dorințe, 20% economii. Recomandarea are caracter informativ.',
       avatar_emotion: 'enthusiastic',
       recommended_product: 'depozit_lei',
       product_cta: { label: 'Vezi Depozite', url: 'https://www.unicredit.ro/economii/depozite.html', type: 'product_page' },
       disclaimer_required: true,
-      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'savings_question' },
+      gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'savings_recommendation' },
     }
   }
   if (lower.includes('invest') || lower.includes('fond') || lower.includes('portofoliu')) {
     return {
-      reply: 'Investițiile sunt un pas important spre libertatea financiară! Diversificarea este cheia — nu pune toți banii într-un singur loc. Fondurile onemarkets UniCredit îți oferă acces la portofolii gestionate de experți. Recomandarea are caracter informativ.',
+      reply: 'Bazat pe profilul tău, fondurile onemarkets UniCredit ar putea fi o opțiune potrivită — oferă diversificare și gestiune profesionistă. Diversificarea este cheia: nu pune toți banii într-un singur loc. Recomandarea are caracter informativ.',
       avatar_emotion: 'informative',
       recommended_product: 'onemarkets_fonduri',
       product_cta: { label: 'Explorează Fondurile', url: 'https://www.unicredit.ro/investitii/fonduri-de-investitii.html', type: 'product_page' },
       disclaimer_required: true,
-      gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'investment_question' },
+      gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'investment_recommendation' },
     }
   }
   if (lower.includes('credit') || lower.includes('împrumut') || lower.includes('imprumut') || lower.includes('casă') || lower.includes('casa')) {
     return {
-      reply: 'Înainte de un credit, analizează cu atenție DAE (Dobânda Anuală Efectivă), nu doar dobânda nominală. Regula generală: rata lunară nu ar trebui să depășească 30% din venitul net. UniCredit oferă credite cu condiții transparente. Recomandarea are caracter informativ.',
+      reply: 'Ținând cont de ce mi-ai spus, merită să analizezi un Credit Imobiliar UniCredit. Verifică întotdeauna DAE-ul, nu doar dobânda nominală — rata lunară nu ar trebui să depășească 30% din venitul net. Recomandarea are caracter informativ.',
       avatar_emotion: 'thinking',
       recommended_product: 'credit_imobiliar',
       product_cta: { label: 'Calculator Credit', url: 'https://www.unicredit.ro/credite/credit-imobiliar.html', type: 'calculator' },
       disclaimer_required: true,
-      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'credit_question' },
+      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'credit_recommendation' },
     }
   }
   if (lower.includes('card') || lower.includes('cashback')) {
     return {
-      reply: 'Un card de credit utilizat responsabil poate aduce beneficii reale — cashback, puncte de loialitate, asigurări de călătorie. Cheia este să plătești întotdeauna soldul integral lunar pentru a evita dobânzile. UniCreditCard oferă beneficii atractive. Recomandarea are caracter informativ.',
+      reply: 'Un card de credit utilizat responsabil poate aduce beneficii reale — cashback, puncte de loialitate, asigurări de călătorie. Cheia este să plătești întotdeauna soldul integral lunar. UniCreditCard oferă beneficii atractive. Recomandarea are caracter informativ.',
       avatar_emotion: 'happy',
       recommended_product: 'unicreditcard',
       product_cta: { label: 'Descoperă UniCreditCard', url: 'https://www.unicredit.ro/carduri/card-de-credit.html', type: 'product_page' },
       disclaimer_required: true,
-      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'card_question' },
+      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'card_recommendation' },
     }
   }
   if (lower.includes('pensie') || lower.includes('retrag') || lower.includes('pilon')) {
     return {
-      reply: 'Pensia Pilonului III îți permite să deduci fiscal până la 400 EUR/an din contribuții. Cu cât începi mai devreme, cu atât beneficiezi mai mult de dobânda compusă. Merită să analizezi această opțiune pentru securitate financiară pe termen lung. Recomandarea are caracter informativ.',
+      reply: 'Pensia Pilonului III îți permite să deduci fiscal până la 400 EUR/an din contribuții. Cu cât începi mai devreme, cu atât beneficiezi mai mult de dobânda compusă. Merită să analizezi această opțiune. Recomandarea are caracter informativ.',
       avatar_emotion: 'informative',
       recommended_product: null,
       product_cta: { label: 'Consultă un Specialist', url: 'https://www.unicredit.ro/contact.html', type: 'contact_advisor' },
       disclaimer_required: true,
-      gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'pension_question' },
+      gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'pension_recommendation' },
     }
   }
 
   return {
-    reply: 'Excelentă întrebare! Sănătatea financiară se construiește pas cu pas: un buget clar, un fond de urgență de 3–6 luni de cheltuieli, economii regulate și investiții diversificate. Sunt aici să te ghidez pe orice subiect. Ce te interesează mai mult?',
+    reply: 'Mulțumesc că mi-ai împărtășit toate acestea! Pe baza discuției noastre, pot să-ți ofer câteva sugestii concrete. Care dintre aspectele despre care am vorbit te interesează cel mai mult să aprofundăm?',
     avatar_emotion: 'happy',
     recommended_product: null,
     product_cta: null,
     disclaimer_required: false,
-    gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'general_question' },
+    gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'general_followup' },
   }
 }
 
@@ -231,9 +287,11 @@ export async function POST(request: NextRequest) {
 
     let llmResponse: LLMResponse
 
+    const userMessageCount = messages.filter(m => m.role === 'user').length
+    const lastUser = [...messages].reverse().find(m => m.role === 'user')
+
     if (!apiKey || provider === 'mock') {
-      const lastUser = [...messages].reverse().find(m => m.role === 'user')
-      llmResponse = getMockResponse(lastUser?.content ?? '')
+      llmResponse = getMockResponse(lastUser?.content ?? '', userMessageCount)
     } else {
       const systemPrompt = buildSystemPrompt(userProfile)
       try {
@@ -244,9 +302,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (llmErr) {
         console.error('[/api/chat] LLM call failed:', llmErr)
-        // Fallback to mock if LLM call fails
-        const lastUser = [...messages].reverse().find(m => m.role === 'user')
-        llmResponse = getMockResponse(lastUser?.content ?? '')
+        llmResponse = getMockResponse(lastUser?.content ?? '', userMessageCount)
       }
     }
 

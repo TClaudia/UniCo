@@ -21,7 +21,8 @@ const EMOTION_CONFIG: Record<AvatarEmotion, {
   bg: string
   bgGradient: string
   label: string
-  animation: object
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  animation: Record<string, any>
   eyeY: number
   pupilOffset: { x: number; y: number }
   browAngle: number

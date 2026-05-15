@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs wc -l)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(Select-String -Path \"components\\\\avatar\\\\AvatarCharacter.tsx\" -Pattern \"function HairLayer|function AvatarSVG|_unused_\")",
+      "Bash(Select-Object LineNumber, Line)"
+    ]
+  }
+}

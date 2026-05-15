@@ -165,11 +165,11 @@ export function getRecommendedProducts(profile: UserProfile): string[] {
     if (!filtered.includes('term_deposit')) {
       filtered.push('term_deposit')
     }
-    return [...new Set(filtered)]
+    return Array.from(new Set(filtered))
   }
 
   // Remove duplicates and return
-  return [...new Set(recommended)]
+  return Array.from(new Set(recommended))
 }
 
 export function getProductDetails(productId: string): ProductRecommendation | null {

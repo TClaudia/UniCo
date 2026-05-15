@@ -3,8 +3,8 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Slider } from '@/components/ui/Slider'
-import { AvatarEngine } from '@/components/avatar/AvatarEngine'
-import { SavingsType, AvatarEmotion } from '@/types'
+import { AvatarCharacter, DEFAULT_AVATAR_CONFIG, CharacterEmotion } from '@/components/avatar/AvatarCharacter'
+import { SavingsType } from '@/types'
 
 interface Step4Props {
   savings: { type: SavingsType; value: number }
@@ -13,17 +13,17 @@ interface Step4Props {
   onBack: () => void
 }
 
-function getSavingsEmotion(value: number, type: SavingsType): AvatarEmotion {
-  if (value === 0) return 'concerned'
+function getSavingsEmotion(value: number, type: SavingsType): CharacterEmotion {
+  if (value === 0) return 'empathetic'
   if (type === 'percent') {
     if (value < 5) return 'thinking'
     if (value < 15) return 'happy'
-    if (value >= 20) return 'celebrating'
-    return 'enthusiastic'
+    if (value >= 20) return 'idea'
+    return 'happy'
   } else {
     if (value < 100) return 'thinking'
     if (value < 500) return 'happy'
-    return 'celebrating'
+    return 'idea'
   }
 }
 
@@ -69,7 +69,7 @@ export function Step4Savings({ savings, onChange, onNext, onBack }: Step4Props) 
 
         {/* Avatar and feedback */}
         <div className="flex items-center gap-4 mb-6 p-4 bg-white rounded-card shadow-chat">
-          <AvatarEngine emotion={emotion} size="md" />
+          <AvatarCharacter config={DEFAULT_AVATAR_CONFIG} emotion={emotion} size="sm" />
           <motion.p
             key={`${savings.value}-${savings.type}`}
             initial={{ opacity: 0, x: 10 }}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useId } from 'react'
 
 // ─── Configuration types & constants ────────────────────────────────────────
 
@@ -30,10 +30,10 @@ export const HAIR_COLORS = [
 ] as const
 
 export const EYE_COLORS = [
-  { id: 'brown', color: '#6B4226', name: 'Căprui'      },
-  { id: 'blue',  color: '#3A7BD5', name: 'Albaștri'   },
-  { id: 'green', color: '#2E8B57', name: 'Verzi'       },
-  { id: 'hazel', color: '#8B7355', name: 'Căprui-verzi'},
+  { id: 'brown', color: '#6B4226', name: 'Căprui'       },
+  { id: 'blue',  color: '#3A7BD5', name: 'Albaștri'    },
+  { id: 'green', color: '#2E8B57', name: 'Verzi'        },
+  { id: 'hazel', color: '#8B7355', name: 'Căprui-verzi' },
 ] as const
 
 export const OUTFITS = [
@@ -86,626 +86,294 @@ export const EMOTIONS: Record<CharacterEmotion, { label: string; color: string }
   alert:      { label: 'Alertă',   color: '#FF6B35' },
 }
 
-// ─── Helper: lighten a hex color by mixing with white ───────────────────────
-function lighten(hex: string, amount = 0.35): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  const lr = Math.round(r + (255 - r) * amount)
-  const lg = Math.round(g + (255 - g) * amount)
-  const lb = Math.round(b + (255 - b) * amount)
-  return `rgb(${lr},${lg},${lb})`
-}
+// ─── Core SVG character (head + torso, no background circle) ─────────────────
 
-// ─── Hair renderer ───────────────────────────────────────────────────────────
-function HairLayer({
-  style, color, uid,
-}: {
-  style: HairStyleId
-  color: string
-  uid: string
-}) {
-  const hi   = lighten(color, 0.42)   // highlight
-  const mid  = lighten(color, 0.18)   // midtone
-  const dark = lighten(color, -0.1)   // shadow (slightly darker)
-
-  const gTop  = `hair-top-${uid}`
-  const gSide = `hair-side-${uid}`
-  const gCurl = `hair-curl-${uid}`
-  const gBun  = `hair-bun-${uid}`
-
-  // Strand helper — radiating thin lines for texture
-  const strands = (
-    cx: number, cy: number,
-    startAngDeg: number, endAngDeg: number,
-    count: number, len: number,
-  ) =>
-    Array.from({ length: count }, (_, i) => {
-      const ang = (startAngDeg + ((endAngDeg - startAngDeg) * i) / (count - 1)) * (Math.PI / 180)
-      return (
-        <line
-          key={i}
-          x1={cx} y1={cy}
-          x2={cx + Math.cos(ang) * len}
-          y2={cy + Math.sin(ang) * len}
-          stroke={hi} strokeWidth="0.7" opacity="0.35"
-          strokeLinecap="round"
-        />
-      )
-    })
-
-  // ── SHORT ──────────────────────────────────────────────────────────────────
-  if (style === 'short') return (
-    <g>
-      <defs>
-        <linearGradient id={gTop} x1="50%" y1="0%" x2="50%" y2="100%">
-          <stop offset="0%"   stopColor={hi}    />
-          <stop offset="45%"  stopColor={color} />
-          <stop offset="100%" stopColor={dark}  />
-        </linearGradient>
-      </defs>
-      {/* Main cap — organic path hugging the top of the head */}
-      <path
-        d="M 51 93
-           C 47 78, 52 60, 66 54
-           C 79 49, 90 47, 100 47
-           C 110 47, 121 49, 134 54
-           C 148 60, 153 78, 149 93
-           C 145 86, 138 80, 126 77
-           C 114 74, 107 73, 100 73
-           C 93 73, 86 74, 74 77
-           C 62 80, 55 86, 51 93 Z"
-        fill={`url(#${gTop})`}
-      />
-      {/* Highlight sheen */}
-      <path
-        d="M 82 52 C 90 48, 110 48, 118 52 C 113 57, 87 57, 82 52 Z"
-        fill={hi} opacity="0.5"
-      />
-      {/* Fine strand lines radiating from crown */}
-      {strands(100, 60, 210, 330, 8, 22)}
-      {/* Sideburn left */}
-      <path
-        d="M 51 93 C 50 98, 49 104, 49 109
-           C 52 109, 56 108, 57 104
-           C 58 100, 56 95, 51 93 Z"
-        fill={color} opacity="0.85"
-      />
-      {/* Sideburn right */}
-      <path
-        d="M 149 93 C 150 98, 151 104, 151 109
-           C 148 109, 144 108, 143 104
-           C 142 100, 144 95, 149 93 Z"
-        fill={color} opacity="0.85"
-      />
-    </g>
-  )
-
-  // ── MEDIUM ─────────────────────────────────────────────────────────────────
-  if (style === 'medium') return (
-    <g>
-      <defs>
-        <linearGradient id={gTop} x1="50%" y1="0%" x2="50%" y2="100%">
-          <stop offset="0%"   stopColor={hi}    />
-          <stop offset="50%"  stopColor={color} />
-          <stop offset="100%" stopColor={dark}  />
-        </linearGradient>
-        <linearGradient id={gSide} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%"   stopColor={color} />
-          <stop offset="60%"  stopColor={mid}   />
-          <stop offset="100%" stopColor={dark}  />
-        </linearGradient>
-      </defs>
-      {/* Top cap */}
-      <path
-        d="M 51 93
-           C 47 78, 52 60, 66 54
-           C 79 49, 90 47, 100 47
-           C 110 47, 121 49, 134 54
-           C 148 60, 153 78, 149 93
-           C 145 86, 138 80, 126 77
-           C 114 74, 107 73, 100 73
-           C 93 73, 86 74, 74 77
-           C 62 80, 55 86, 51 93 Z"
-        fill={`url(#${gTop})`}
-      />
-      {/* Highlight sheen */}
-      <path
-        d="M 82 52 C 90 48, 110 48, 118 52 C 113 57, 87 57, 82 52 Z"
-        fill={hi} opacity="0.4"
-      />
-      {/* Side-part line */}
-      <path
-        d="M 100 47 C 99 55, 98 62, 97 70"
-        stroke={dark} strokeWidth="1" fill="none" opacity="0.4"
-      />
-      {/* Left flowing side — organic curved bottom */}
-      <path
-        d="M 51 93
-           C 48 100, 46 110, 45 118
-           C 44 126, 44 133, 46 139
-           C 48 143, 52 145, 57 143
-           C 61 140, 62 133, 62 125
-           C 62 117, 62 108, 60 101
-           C 58 96, 55 93, 51 93 Z"
-        fill={`url(#${gSide})`}
-      />
-      {/* Left strand lines */}
-      {strands(53, 100, 80, 140, 4, 18)}
-      {/* Right flowing side */}
-      <path
-        d="M 149 93
-           C 152 100, 154 110, 155 118
-           C 156 126, 156 133, 154 139
-           C 152 143, 148 145, 143 143
-           C 139 140, 138 133, 138 125
-           C 138 117, 138 108, 140 101
-           C 142 96, 145 93, 149 93 Z"
-        fill={`url(#${gSide})`}
-      />
-      {strands(147, 100, 40, 100, 4, 18)}
-    </g>
-  )
-
-  // ── LONG ───────────────────────────────────────────────────────────────────
-  if (style === 'long') return (
-    <g>
-      <defs>
-        <linearGradient id={gTop} x1="50%" y1="0%" x2="50%" y2="100%">
-          <stop offset="0%"   stopColor={hi}    />
-          <stop offset="45%"  stopColor={color} />
-          <stop offset="100%" stopColor={dark}  />
-        </linearGradient>
-        <linearGradient id={gSide} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%"   stopColor={color} />
-          <stop offset="55%"  stopColor={mid}   />
-          <stop offset="100%" stopColor={dark}  />
-        </linearGradient>
-      </defs>
-      {/* Back layer — behind the head */}
-      <path
-        d="M 46 95
-           C 41 112, 39 130, 40 148
-           C 40 162, 42 172, 45 180
-           C 50 188, 58 188, 62 182
-           C 64 175, 64 165, 64 155
-           C 64 140, 63 124, 62 108
-           C 61 100, 57 95, 46 95 Z"
-        fill={dark} opacity="0.55"
-      />
-      <path
-        d="M 154 95
-           C 159 112, 161 130, 160 148
-           C 160 162, 158 172, 155 180
-           C 150 188, 142 188, 138 182
-           C 136 175, 136 165, 136 155
-           C 136 140, 137 124, 138 108
-           C 139 100, 143 95, 154 95 Z"
-        fill={dark} opacity="0.55"
-      />
-      {/* Top cap */}
-      <path
-        d="M 51 93
-           C 47 78, 52 60, 66 54
-           C 79 49, 90 47, 100 47
-           C 110 47, 121 49, 134 54
-           C 148 60, 153 78, 149 93
-           C 145 86, 138 80, 126 77
-           C 114 74, 107 73, 100 73
-           C 93 73, 86 74, 74 77
-           C 62 80, 55 86, 51 93 Z"
-        fill={`url(#${gTop})`}
-      />
-      {/* Highlight */}
-      <path
-        d="M 80 52 C 88 48, 112 48, 120 52 C 115 58, 85 58, 80 52 Z"
-        fill={hi} opacity="0.4"
-      />
-      {/* Left long piece with natural wave at end */}
-      <path
-        d="M 51 93
-           C 47 105, 44 118, 43 132
-           C 42 145, 42 158, 43 168
-           C 44 176, 46 182, 50 184
-           C 54 185, 58 182, 60 176
-           C 61 168, 61 158, 61 146
-           C 61 134, 61 120, 60 109
-           C 59 102, 56 96, 51 93 Z"
-        fill={`url(#${gSide})`}
-      />
-      {/* Wave detail lines left */}
-      <path d="M 47 140 C 50 145, 52 150, 50 156" stroke={hi} strokeWidth="1.2" fill="none" opacity="0.45" strokeLinecap="round" />
-      <path d="M 51 155 C 54 162, 56 168, 54 174" stroke={hi} strokeWidth="1.0" fill="none" opacity="0.35" strokeLinecap="round" />
-      {/* Right long piece */}
-      <path
-        d="M 149 93
-           C 153 105, 156 118, 157 132
-           C 158 145, 158 158, 157 168
-           C 156 176, 154 182, 150 184
-           C 146 185, 142 182, 140 176
-           C 139 168, 139 158, 139 146
-           C 139 134, 139 120, 140 109
-           C 141 102, 144 96, 149 93 Z"
-        fill={`url(#${gSide})`}
-      />
-      <path d="M 153 140 C 150 145, 148 150, 150 156" stroke={hi} strokeWidth="1.2" fill="none" opacity="0.45" strokeLinecap="round" />
-      <path d="M 149 155 C 146 162, 144 168, 146 174" stroke={hi} strokeWidth="1.0" fill="none" opacity="0.35" strokeLinecap="round" />
-    </g>
-  )
-
-  // ── CURLY ──────────────────────────────────────────────────────────────────
-  if (style === 'curly') return (
-    <g>
-      <defs>
-        <radialGradient id={gCurl} cx="50%" cy="30%" r="60%">
-          <stop offset="0%"   stopColor={hi}    />
-          <stop offset="55%"  stopColor={color} />
-          <stop offset="100%" stopColor={dark}  />
-        </radialGradient>
-      </defs>
-      {/* Volume base */}
-      <ellipse cx="100" cy="76" rx="58" ry="42" fill={dark} opacity="0.5" />
-      {/* Curl clusters — back row */}
-      {[55, 70, 85, 100, 115, 130, 145].map((cx, i) => (
-        <circle key={`b${i}`} cx={cx} cy={66 + (i % 2) * 7} r={11}
-          fill={color} opacity={0.75 + (i % 2) * 0.1} />
-      ))}
-      {/* Curl clusters — front row */}
-      {[62, 78, 94, 110, 126, 142].map((cx, i) => (
-        <circle key={`f${i}`} cx={cx} cy={55 + (i % 2) * 5} r={10}
-          fill={`url(#${gCurl})`} opacity={0.88 + (i % 3) * 0.04} />
-      ))}
-      {/* Highlight dot on each front curl */}
-      {[62, 78, 94, 110, 126, 142].map((cx, i) => (
-        <circle key={`h${i}`} cx={cx - 3} cy={50 + (i % 2) * 5} r={3}
-          fill={hi} opacity={0.35} />
-      ))}
-      {/* Center top fills gap */}
-      <circle cx="100" cy="48" r="9" fill={`url(#${gCurl})`} />
-      <circle cx="100" cy="48" r="3" fill={hi} opacity="0.4" />
-    </g>
-  )
-
-  // ── BUN ────────────────────────────────────────────────────────────────────
-  // style === 'bun'
-  return (
-    <g>
-      <defs>
-        <radialGradient id={gBun} cx="38%" cy="32%" r="65%">
-          <stop offset="0%"   stopColor={hi}    />
-          <stop offset="50%"  stopColor={color} />
-          <stop offset="100%" stopColor={dark}  />
-        </radialGradient>
-        <linearGradient id={gTop} x1="50%" y1="0%" x2="50%" y2="100%">
-          <stop offset="0%"   stopColor={hi}    />
-          <stop offset="55%"  stopColor={color} />
-          <stop offset="100%" stopColor={dark}  />
-        </linearGradient>
-      </defs>
-      {/* Sleek cap — flatter/tighter than short */}
-      <path
-        d="M 53 96
-           C 49 82, 53 64, 67 57
-           C 80 51, 91 50, 100 50
-           C 109 50, 120 51, 133 57
-           C 147 64, 151 82, 147 96
-           C 143 89, 136 84, 124 81
-           C 112 78, 106 77, 100 77
-           C 94 77, 88 78, 76 81
-           C 64 84, 57 89, 53 96 Z"
-        fill={`url(#${gTop})`}
-      />
-      {/* Gather lines toward the top */}
-      {strands(100, 64, 190, 350, 9, 16)}
-      {/* Bun base disc (slightly behind bun sphere) */}
-      <ellipse cx="100" cy="50" rx="21" ry="8" fill={dark} opacity="0.55" />
-      {/* Main bun sphere */}
-      <circle cx="100" cy="44" r="20" fill={`url(#${gBun})`} />
-      {/* Wrapped strand arcs */}
-      <path d="M 83 44 A 17 11 0 0 1 117 44" fill="none" stroke={hi} strokeWidth="1.4" opacity="0.45" />
-      <path d="M 85 38 A 15 9 0 0 0 115 38"  fill="none" stroke={hi} strokeWidth="1.2" opacity="0.35" />
-      <path d="M 88 50 A 12 7 0 0 1 112 50"  fill="none" stroke={mid} strokeWidth="1"   opacity="0.3"  />
-      {/* Shine specular */}
-      <ellipse cx="92" cy="37" rx="7" ry="4" fill={hi} opacity="0.45" />
-    </g>
-  )
-}
-
-// ─── Raw SVG character (exported for direct embedding) ───────────────────────
-
-export interface AvatarSVGProps {
-  config: AvatarConfig
-  emotion: CharacterEmotion
-  blinkPhase: number
+function AvatarSVG({ config, emotion, blinkPhase, breathPhase, uid }: {
+  config:      AvatarConfig
+  emotion:     CharacterEmotion
+  blinkPhase:  number
   breathPhase: number
-}
-
-export function AvatarSVG({ config, emotion, blinkPhase, breathPhase }: AvatarSVGProps) {
+  uid:         string
+}) {
   const skin      = SKIN_TONES.find(s => s.id === config.skinTone)?.color  ?? '#FDDBB4'
-  const hairColor = HAIR_COLORS.find(h => h.id === config.hairColor)?.color ?? '#1C1C1C'
+  const hairColor = HAIR_COLORS.find(h => h.id === config.hairColor)?.color ?? '#1A1A1A'
   const eyeColor  = EYE_COLORS.find(e => e.id === config.eyeColor)?.color   ?? '#6B4226'
+  const breathY   = Math.sin(breathPhase) * 1.5
+  const isBlinking = blinkPhase > 0.85
 
-  const breathOffset = Math.sin(breathPhase) * 1.5
-  const isBlinking   = blinkPhase > 0.85
+  const gradId   = `av-sg-${uid}`
+  const filterId = `av-sf-${uid}`
+  const clipId   = `av-sc-${uid}`
 
-  // Unique ID per SVG instance to avoid `defs` collisions when multiple on the page
-  const uid = `${config.hairStyle}-${config.hairColor}`
-
-  const eyeRy = isBlinking ? 1.5 : (emotion === 'idea' ? 10 : 8)
-
-  // ── Eyebrows ──────────────────────────────────────────────────────────────
-  type BrowType = 'worried' | 'stern' | 'default'
-  const getBrows = (): { leftY: number; rightY: number; type: BrowType } => {
-    if (emotion === 'thinking')   return { leftY: 72, rightY: 68, type: 'stern'   }
-    if (emotion === 'empathetic') return { leftY: 70, rightY: 70, type: 'worried' }
-    if (emotion === 'alert')      return { leftY: 68, rightY: 68, type: 'stern'   }
-    return { leftY: 73, rightY: 73, type: 'default' }
+  const getEyebrows = () => {
+    if (emotion === 'thinking')   return { leftY: 72, rightY: 68, worried: false, stern: false }
+    if (emotion === 'empathetic') return { leftY: 70, rightY: 70, worried: true,  stern: false }
+    if (emotion === 'alert')      return { leftY: 68, rightY: 68, worried: false, stern: true  }
+    if (emotion === 'happy' || emotion === 'idea')
+                                  return { leftY: 73, rightY: 73, worried: false, stern: false }
+    return { leftY: 72, rightY: 72, worried: false, stern: false }
   }
-  const brows = getBrows()
 
-  // ── Mouth ─────────────────────────────────────────────────────────────────
   const getMouth = () => {
-    if (emotion === 'happy' || emotion === 'idea')  return 'smile'
-    if (emotion === 'empathetic')                   return 'gentle'
-    if (emotion === 'alert')                        return 'firm'
-    if (emotion === 'thinking')                     return 'neutral-think'
+    if (emotion === 'happy' || emotion === 'idea') return 'smile'
+    if (emotion === 'empathetic') return 'gentle'
+    if (emotion === 'alert')      return 'firm'
+    if (emotion === 'thinking')   return 'neutral-think'
     return 'neutral'
   }
-  const mouth = getMouth()
 
-  // ── Eye gaze ──────────────────────────────────────────────────────────────
   const getGaze = () => {
-    if (emotion === 'thinking') return { dx: 4,  dy: -3 }
-    if (emotion === 'typing')   return { dx: -5, dy: 6  }
+    if (emotion === 'thinking') return { dx: 4, dy: -3 }
+    if (emotion === 'typing')   return { dx: -5, dy: 6 }
     if (emotion === 'idea')     return { dx: 0,  dy: -2 }
     return { dx: 0, dy: 0 }
   }
-  const gaze = getGaze()
 
-  // ── Skin shadow (below hair) ───────────────────────────────────────────────
-  const skinShadow = `${skin}88`
+  const brows = getEyebrows()
+  const mouth = getMouth()
+  const gaze  = getGaze()
 
   return (
-    <svg
-      viewBox="0 0 200 260"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ width: '100%', height: '100%', overflow: 'visible' }}
-    >
+    <svg viewBox="0 0 200 260" xmlns="http://www.w3.org/2000/svg"
+      style={{ width: '100%', height: '100%', overflow: 'visible' }}>
       <defs>
-        <radialGradient id={`skin-${uid}`} cx="44%" cy="38%" r="58%">
-          <stop offset="0%"   stopColor={skin}         />
-          <stop offset="75%"  stopColor={skin}         />
-          <stop offset="100%" stopColor={skinShadow}   />
+        <clipPath id={clipId}>
+          <rect x="40" y="55" width="120" height="130" />
+        </clipPath>
+        <radialGradient id={gradId} cx="45%" cy="40%" r="60%">
+          <stop offset="0%"   stopColor={skin} stopOpacity="1"    />
+          <stop offset="100%" stopColor={skin} stopOpacity="0.85" />
         </radialGradient>
-        <filter id={`shadow-${uid}`}>
-          <feDropShadow dx="0" dy="3" stdDeviation="5" floodOpacity="0.18" />
+        <filter id={filterId}>
+          <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.15" />
         </filter>
       </defs>
 
-      <g transform={`translate(0, ${breathOffset})`}>
+      <g transform={`translate(0,${breathY})`}>
 
-        {/* ── Body ── */}
+        {/* Outfit */}
         {config.outfit === 'suit' && (
           <g>
-            <ellipse cx="100" cy="230" rx="66" ry="46" fill="#1A1A2E" />
-            <rect x="34" y="194" width="132" height="72" rx="13" fill="#1A1A2E" />
-            {/* Shirt */}
-            <rect x="88" y="174" width="24" height="56" rx="2" fill="#FFFFFF" opacity="0.12" />
-            {/* Tie */}
-            {config.accessory !== 'tie' && (
-              <rect x="95" y="174" width="10" height="52" rx="1" fill="#E30613" opacity="0.75" />
-            )}
-            {/* Lapels */}
-            <path d="M 88 174 L 70 195 L 34 195 L 34 200 L 68 200 Z" fill="#162035" />
-            <path d="M 112 174 L 130 195 L 166 195 L 166 200 L 132 200 Z" fill="#162035" />
-            <rect x="82" y="174" width="36" height="9" rx="2" fill="#F0EFED" />
+            <ellipse cx="100" cy="230" rx="65" ry="45" fill="#1A1A2E" />
+            <rect x="35"  y="195" width="130" height="70" rx="12" fill="#1A1A2E" />
+            <rect x="88"  y="175" width="24"  height="55" rx="2"  fill="#FFF"    opacity="0.12" />
+            <rect x="93"  y="175" width="14"  height="55" rx="1"  fill="#E30613" opacity="0.82" />
+            <rect x="35"  y="195" width="30"  height="55" rx="8"  fill="#12182B" />
+            <rect x="135" y="195" width="30"  height="55" rx="8"  fill="#12182B" />
+            <rect x="82"  y="175" width="36"  height="8"  rx="2"  fill="#F0EFED" />
           </g>
         )}
         {config.outfit === 'smart' && (
           <g>
-            <ellipse cx="100" cy="230" rx="66" ry="46" fill="#3D4A5C" />
-            <rect x="34" y="194" width="132" height="72" rx="13" fill="#3D4A5C" />
-            <rect x="34" y="194" width="32" height="56" rx="9" fill="#2E3B4A" />
-            <rect x="134" y="194" width="32" height="56" rx="9" fill="#2E3B4A" />
-            <rect x="80" y="174" width="40" height="9" rx="2" fill="#DDD9D3" />
+            <ellipse cx="100" cy="230" rx="65" ry="45" fill="#4A5568" />
+            <rect x="35"  y="195" width="130" height="70" rx="12" fill="#4A5568" />
+            <rect x="35"  y="195" width="30"  height="55" rx="8"  fill="#3A4556" />
+            <rect x="135" y="195" width="30"  height="55" rx="8"  fill="#3A4556" />
+            <rect x="80"  y="175" width="40"  height="8"  rx="2"  fill="#E2E0DC" />
           </g>
         )}
         {config.outfit === 'business' && (
           <g>
-            <ellipse cx="100" cy="230" rx="66" ry="46" fill="#C8050F" opacity="0.88" />
-            <rect x="34" y="194" width="132" height="72" rx="13" fill="#C8050F" opacity="0.88" />
-            <rect x="34" y="194" width="32" height="56" rx="9" fill="#A00410" opacity="0.9" />
-            <rect x="134" y="194" width="32" height="56" rx="9" fill="#A00410" opacity="0.9" />
-            <rect x="80" y="174" width="40" height="9" rx="2" fill="#FFFFFF" opacity="0.25" />
+            <ellipse cx="100" cy="230" rx="65" ry="45" fill="#E30613" opacity="0.85" />
+            <rect x="35"  y="195" width="130" height="70" rx="12" fill="#E30613" opacity="0.85" />
+            <rect x="35"  y="195" width="30"  height="55" rx="8"  fill="#B80510" opacity="0.9" />
+            <rect x="135" y="195" width="30"  height="55" rx="8"  fill="#B80510" opacity="0.9" />
+            <rect x="80"  y="175" width="40"  height="8"  rx="2"  fill="#FFF"    opacity="0.3" />
           </g>
         )}
 
-        {/* ── Neck ── */}
-        <path
-          d="M 86 162 C 86 175 88 184 100 184 C 112 184 114 175 114 162 Z"
-          fill={skin}
-        />
+        {/* Neck */}
+        <rect x="86" y="162" width="28" height="22" rx="8" fill={skin} />
 
-        {/* ── Head ── */}
-        <g filter={`url(#shadow-${uid})`}>
-          <ellipse cx="100" cy="115" rx="54" ry="62" fill={`url(#skin-${uid})`} />
+        {/* Head */}
+        <g filter={`url(#${filterId})`}>
+          <ellipse cx="100" cy="115" rx="54" ry="62" fill={`url(#${gradId})`} />
         </g>
 
-        {/* Hair back layer for long style */}
+        {/* Hair back */}
         {config.hairStyle === 'long' && (
-          <g>
-            <path d="M 46 95 C 40 115 38 135 40 155 C 42 172 46 182 52 186
-                     C 42 180 40 165 39 148 C 38 130 40 110 44 93 Z"
-              fill={HAIR_COLORS.find(h => h.id === config.hairColor)?.color ?? '#1C1C1C'} opacity="0.4" />
-            <path d="M 154 95 C 160 115 162 135 160 155 C 158 172 154 182 148 186
-                     C 158 180 160 165 161 148 C 162 130 160 110 156 93 Z"
-              fill={HAIR_COLORS.find(h => h.id === config.hairColor)?.color ?? '#1C1C1C'} opacity="0.4" />
-          </g>
+          <ellipse cx="100" cy="100" rx="60" ry="72" fill={hairColor} clipPath={`url(#${clipId})`} />
+        )}
+        {config.hairStyle === 'curly' && (
+          [60,72,84,96,108,120,132,144].map((x, i) => (
+            <circle key={i} cx={x} cy={52 + (i % 2) * 6} r={10} fill={hairColor} opacity="0.9" />
+          ))
         )}
 
-        {/* ── Ears ── */}
+        {/* Ears */}
         <ellipse cx="46"  cy="118" rx="8" ry="11" fill={skin} />
         <ellipse cx="154" cy="118" rx="8" ry="11" fill={skin} />
-        <ellipse cx="46"  cy="118" rx="5" ry="7"  fill={skin} opacity="0.55" />
-        <ellipse cx="154" cy="118" rx="5" ry="7"  fill={skin} opacity="0.55" />
+        <ellipse cx="46"  cy="118" rx="5" ry="7"  fill={skin} opacity="0.6" />
+        <ellipse cx="154" cy="118" rx="5" ry="7"  fill={skin} opacity="0.6" />
 
-        {/* Earrings */}
         {config.accessory === 'earrings' && (
           <>
-            <circle cx="46"  cy="129" r="4" fill="#D4AA50" />
-            <circle cx="154" cy="129" r="4" fill="#D4AA50" />
-            <circle cx="46"  cy="129" r="2" fill="#FFD700" opacity="0.6" />
-            <circle cx="154" cy="129" r="2" fill="#FFD700" opacity="0.6" />
+            <circle cx="46"  cy="128" r="4" fill="#D4AA50" />
+            <circle cx="154" cy="128" r="4" fill="#D4AA50" />
           </>
         )}
 
-        {/* ── HAIR (front layers, drawn over ears) ── */}
-        <HairLayer style={config.hairStyle} color={hairColor} uid={uid} />
+        {/* Hair front */}
+        {config.hairStyle === 'short' && (
+          <ellipse cx="100" cy="72" rx="52" ry="28" fill={hairColor} />
+        )}
+        {config.hairStyle === 'medium' && (
+          <g>
+            <ellipse cx="100" cy="70" rx="52" ry="26" fill={hairColor} />
+            <rect x="48"  y="75" width="16" height="30" rx="8" fill={hairColor} />
+            <rect x="136" y="75" width="16" height="30" rx="8" fill={hairColor} />
+          </g>
+        )}
+        {config.hairStyle === 'long' && (
+          <g>
+            <ellipse cx="100" cy="70" rx="52" ry="26" fill={hairColor} />
+            <rect x="46"  y="75" width="16" height="70" rx="8" fill={hairColor} />
+            <rect x="138" y="75" width="16" height="70" rx="8" fill={hairColor} />
+          </g>
+        )}
+        {config.hairStyle === 'curly' && (
+          <ellipse cx="100" cy="65" rx="56" ry="32" fill={hairColor} />
+        )}
+        {config.hairStyle === 'bun' && (
+          <g>
+            <ellipse cx="100" cy="75" rx="50" ry="22" fill={hairColor} />
+            <circle  cx="100" cy="56" r="16"           fill={hairColor} />
+          </g>
+        )}
 
-        {/* ── Forehead subtle highlight ── */}
-        <ellipse cx="100" cy="96" rx="18" ry="11" fill="#FFFFFF" opacity="0.07" />
+        {/* Forehead highlight */}
+        <ellipse cx="100" cy="95" rx="20" ry="12" fill="#FFF" opacity="0.07" />
 
-        {/* ── Eyebrows ── */}
-        <g stroke={hairColor} strokeWidth="2.6" strokeLinecap="round" fill="none">
-          {brows.type === 'worried' ? (
+        {/* Eyebrows */}
+        <g stroke={hairColor} strokeWidth="2.5" strokeLinecap="round" fill="none">
+          {brows.worried ? (
             <>
-              <path d={`M 70 ${brows.leftY}  Q 80 ${brows.leftY  - 5} 90 ${brows.leftY}`}  />
+              <path d={`M 70 ${brows.leftY}  Q 80 ${brows.leftY  - 5} 90 ${brows.leftY}`} />
               <path d={`M 110 ${brows.rightY} Q 120 ${brows.rightY - 5} 130 ${brows.rightY}`} />
             </>
-          ) : brows.type === 'stern' ? (
+          ) : brows.stern ? (
             <>
-              <line x1="68" y1={brows.leftY  + 3} x2="90"  y2={brows.leftY  - 3} />
+              <line x1="68"  y1={brows.leftY  + 3} x2="90"  y2={brows.leftY  - 3} />
               <line x1="110" y1={brows.rightY - 3} x2="132" y2={brows.rightY + 3} />
             </>
           ) : (
             <>
-              <path d={`M 70 ${brows.leftY}  Q 80 ${brows.leftY  - 4} 90 ${brows.leftY}`}  />
+              <path d={`M 70 ${brows.leftY}  Q 80 ${brows.leftY  - 4} 90 ${brows.leftY}`} />
               <path d={`M 110 ${brows.rightY} Q 120 ${brows.rightY - 4} 130 ${brows.rightY}`} />
             </>
           )}
         </g>
 
-        {/* ── Eyes ── */}
-        <g transform={`translate(${gaze.dx}, ${gaze.dy})`}>
-          {/* Left */}
-          <ellipse cx="80"  cy="108" rx="11" ry={eyeRy} fill="#FFFFFF" />
-          {!isBlinking && <ellipse cx="80"  cy="108" rx="6.5" ry="6.5" fill={eyeColor} />}
-          {!isBlinking && <circle  cx="80"  cy="108" r="4"  fill="#111" />}
-          {!isBlinking && <circle  cx="82"  cy="105" r="1.6" fill="#FFF" />}
-          {/* Right */}
-          <ellipse cx="120" cy="108" rx="11" ry={eyeRy} fill="#FFFFFF" />
-          {!isBlinking && <ellipse cx="120" cy="108" rx="6.5" ry="6.5" fill={eyeColor} />}
-          {!isBlinking && <circle  cx="120" cy="108" r="4"  fill="#111" />}
-          {!isBlinking && <circle  cx="122" cy="105" r="1.6" fill="#FFF" />}
-          {/* Sparkle on idea */}
+        {/* Eyes */}
+        <g transform={`translate(${gaze.dx},${gaze.dy})`}>
+          {/* Left eye */}
+          <ellipse cx="80" cy="108" rx="11"
+            ry={isBlinking ? 1.5 : (emotion === 'idea' ? 10 : 8)} fill="#FFF" />
+          {!isBlinking && <ellipse cx="80" cy="108" rx="6" ry="6" fill={eyeColor} />}
+          {!isBlinking && <circle  cx="80" cy="108" r="3.5"       fill="#1A1A1A" />}
+          {!isBlinking && <circle  cx="82" cy="106" r="1.5"       fill="#FFF"    />}
           {emotion === 'idea' && !isBlinking && (
             <>
-              <circle cx="73"  cy="100" r="3" fill="#FFE066" opacity="0.9" />
-              <circle cx="90"  cy="99"  r="2" fill="#FFE066" opacity="0.7" />
+              <circle cx="73" cy="100" r="3" fill="#FFE066" opacity="0.9" />
+              <circle cx="90" cy="99"  r="2" fill="#FFE066" opacity="0.7" />
+            </>
+          )}
+
+          {/* Right eye */}
+          <ellipse cx="120" cy="108" rx="11"
+            ry={isBlinking ? 1.5 : (emotion === 'idea' ? 10 : 8)} fill="#FFF" />
+          {!isBlinking && <ellipse cx="120" cy="108" rx="6" ry="6" fill={eyeColor} />}
+          {!isBlinking && <circle  cx="120" cy="108" r="3.5"       fill="#1A1A1A" />}
+          {!isBlinking && <circle  cx="122" cy="106" r="1.5"       fill="#FFF"    />}
+          {emotion === 'idea' && !isBlinking && (
+            <>
               <circle cx="113" cy="100" r="3" fill="#FFE066" opacity="0.9" />
               <circle cx="130" cy="99"  r="2" fill="#FFE066" opacity="0.7" />
             </>
           )}
         </g>
 
-        {/* ── Glasses ── */}
+        {/* Glasses */}
         {(config.accessory === 'glasses' || emotion === 'thinking') && (
           <g
             stroke={emotion === 'thinking' ? '#3A7BD5' : hairColor}
             strokeWidth="1.8" fill="none"
-            opacity={emotion === 'thinking' ? 1 : 0.88}
+            opacity={emotion === 'thinking' ? 1 : 0.9}
           >
-            <rect x="67" y="100" width="28" height="18" rx="6" />
+            <rect x="67"  y="100" width="28" height="18" rx="6" />
             <rect x="105" y="100" width="28" height="18" rx="6" />
-            <line x1="95" y1="109" x2="105" y2="109" />
-            <line x1="48" y1="107" x2="67"  y2="107" />
+            <line x1="95"  y1="109" x2="105" y2="109" />
+            <line x1="48"  y1="107" x2="67"  y2="107" />
             <line x1="133" y1="107" x2="152" y2="107" />
             {emotion === 'thinking' && (
               <>
-                <rect x="67" y="100" width="28" height="18" rx="6" fill="#3A7BD5" opacity="0.07" />
-                <rect x="105" y="100" width="28" height="18" rx="6" fill="#3A7BD5" opacity="0.07" />
+                <rect x="67"  y="100" width="28" height="18" rx="6" fill="#3A7BD5" opacity="0.08" />
+                <rect x="105" y="100" width="28" height="18" rx="6" fill="#3A7BD5" opacity="0.08" />
               </>
             )}
           </g>
         )}
 
-        {/* ── Nose ── */}
+        {/* Nose */}
         <path d="M 96 118 Q 92 130 96 136 Q 100 139 104 136 Q 108 130 104 118"
-          fill="none" stroke={skin} strokeWidth="1.6" opacity="0.4" />
+          fill="none" stroke={skin} strokeWidth="1.5" opacity="0.45" />
 
-        {/* ── Cheek blush ── */}
+        {/* Cheeks */}
         {(emotion === 'happy' || emotion === 'idea') && (
           <>
-            <ellipse cx="68"  cy="126" rx="11" ry="6" fill="#E30613" opacity="0.11" />
-            <ellipse cx="132" cy="126" rx="11" ry="6" fill="#E30613" opacity="0.11" />
+            <ellipse cx="68"  cy="126" rx="10" ry="6" fill="#E30613" opacity="0.11" />
+            <ellipse cx="132" cy="126" rx="10" ry="6" fill="#E30613" opacity="0.11" />
           </>
         )}
 
-        {/* ── Mouth ── */}
-        {mouth === 'smile' && (
-          <path d="M 81 143 Q 100 159 119 143"
-            stroke="#7A4A2A" strokeWidth="2.6" fill="none" strokeLinecap="round" />
-        )}
-        {mouth === 'gentle' && (
-          <path d="M 86 146 Q 100 153 114 146"
-            stroke="#7A4A2A" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-        )}
-        {mouth === 'firm' && (
-          <line x1="84" y1="146" x2="116" y2="146"
-            stroke="#7A4A2A" strokeWidth="2.5" strokeLinecap="round" />
-        )}
-        {mouth === 'neutral-think' && (
-          <path d="M 86 147 Q 100 143 114 147"
-            stroke="#7A4A2A" strokeWidth="2" fill="none" strokeLinecap="round" />
-        )}
-        {mouth === 'neutral' && (
-          <path d="M 86 145 Q 100 150 114 145"
-            stroke="#7A4A2A" strokeWidth="2" fill="none" strokeLinecap="round" />
-        )}
+        {/* Mouth */}
+        {mouth === 'smile'         && <path d="M 82 144 Q 100 158 118 144" stroke="#8B5E3C" strokeWidth="2.5" fill="none" strokeLinecap="round" />}
+        {mouth === 'gentle'        && <path d="M 85 146 Q 100 151 115 146" stroke="#8B5E3C" strokeWidth="2"   fill="none" strokeLinecap="round" />}
+        {mouth === 'firm'          && <line x1="84" y1="146" x2="116" y2="146" stroke="#8B5E3C" strokeWidth="2.5" strokeLinecap="round" />}
+        {mouth === 'neutral-think' && <path d="M 86 147 Q 100 144 114 147" stroke="#8B5E3C" strokeWidth="2"   fill="none" strokeLinecap="round" />}
+        {mouth === 'neutral'       && <path d="M 86 146 Q 100 150 114 146" stroke="#8B5E3C" strokeWidth="2"   fill="none" strokeLinecap="round" />}
 
-        {/* ── Tie accessory ── */}
+        {/* Tie */}
         {config.accessory === 'tie' && (
           <g>
-            <polygon points="100,170 94,182 100,198 106,182" fill="#E30613" />
-            <polygon points="100,164 92,172 108,172"           fill="#B00510" />
-            <line x1="100" y1="172" x2="100" y2="192"
-              stroke="#FF4455" strokeWidth="0.8" opacity="0.5" />
+            <polygon points="100,170 95,180 100,195 105,180" fill="#E30613" />
+            <polygon points="100,165 93,172 107,172"          fill="#B80510" />
           </g>
         )}
 
-        {/* ── Emotion overlays ── */}
+        {/* Emotion accessories */}
         {emotion === 'idea' && (
           <g>
-            <g transform="translate(136, 54)">
-              <rect x="-18" y="-16" width="36" height="30" rx="4" fill="#1A1A2E" opacity="0.92" />
-              <polyline points="-12,8 -5,0 3,6 11,-7"
-                stroke="#00E5B0" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              <line x1="-12" y1="11" x2="12" y2="11" stroke="#FFF" strokeWidth="0.5" opacity="0.25" />
-              <line x1="-12" y1="5"  x2="12" y2="5"  stroke="#FFF" strokeWidth="0.5" opacity="0.25" />
-              <circle cx="11" cy="-7" r="3.5" fill="#FFE066" opacity="0.9" />
+            <g transform="translate(135,55)">
+              <rect x="-18" y="-15" width="36" height="30" rx="4" fill="#1A1A2E" opacity="0.9" />
+              <polyline points="-12,8 -6,0 2,5 10,-6" stroke="#00E5B0" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+              <line x1="-12" y1="10" x2="12" y2="10" stroke="#FFF" strokeWidth="0.5" opacity="0.3" />
+              <line x1="-12" y1="4"  x2="12" y2="4"  stroke="#FFF" strokeWidth="0.5" opacity="0.3" />
+              <circle cx="10" cy="-6" r="3" fill="#FFE066" opacity="0.9" />
             </g>
-            <path d="M 130 60 Q 128 80 124 90"
-              stroke="#3A7BD5" strokeWidth="1.2" fill="none" strokeDasharray="3,2.5" opacity="0.5" />
+            <path d="M 130 60 Q 128 80 125 90" stroke="#3A7BD5" strokeWidth="1"
+              fill="none" strokeDasharray="3,2" opacity="0.5" />
           </g>
         )}
         {emotion === 'alert' && (
-          <g transform="translate(148, 92)">
-            <polygon points="0,-15 15,14 -15,14" fill="#FF6B35" opacity="0.95" />
-            <text x="0" y="9" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#FFFFFF">!</text>
+          <g transform="translate(148,95)">
+            <polygon points="0,-14 14,14 -14,14" fill="#FF6B35" opacity="0.95" />
+            <text x="0" y="8" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#FFF">!</text>
           </g>
         )}
         {emotion === 'thinking' && (
           <g>
-            {[
-              { cx: 148, cy: 74, r: 6.5, delay: '0s'    },
-              { cx: 160, cy: 62, r: 4.5, delay: '0.3s'  },
-              { cx: 169, cy: 51, r: 3,   delay: '0.6s'  },
-            ].map(({ cx, cy, r, delay }) => (
-              <circle key={delay} cx={cx} cy={cy} r={r} fill="#7B5EA7" opacity="0.25">
-                <animate attributeName="r"       values={`${r};${r * 1.5};${r}`} dur="1.5s" begin={delay} repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.25;0.08;0.25"         dur="1.5s" begin={delay} repeatCount="indefinite" />
-              </circle>
-            ))}
+            <circle cx="148" cy="75" r="6" fill="#7B5EA7" opacity="0.3">
+              <animate attributeName="r"       values="6;9;6"       dur="1.5s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.3;0.1;0.3" dur="1.5s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="160" cy="62" r="4" fill="#7B5EA7" opacity="0.2">
+              <animate attributeName="r"       values="4;6;4"        dur="1.5s" begin="0.3s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.2;0.05;0.2" dur="1.5s" begin="0.3s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="168" cy="50" r="3" fill="#7B5EA7" opacity="0.15">
+              <animate attributeName="r" values="3;5;3" dur="1.5s" begin="0.6s" repeatCount="indefinite" />
+            </circle>
           </g>
         )}
 
@@ -714,18 +382,19 @@ export function AvatarSVG({ config, emotion, blinkPhase, breathPhase }: AvatarSV
   )
 }
 
-// ─── AvatarCharacter — animated wrapper ─────────────────────────────────────
+// ─── AvatarCharacter — animated wrapper ──────────────────────────────────────
 
 interface AvatarCharacterProps {
-  config:    AvatarConfig
-  emotion:   CharacterEmotion
-  size?:     'sm' | 'md' | 'lg'
+  config:     AvatarConfig
+  emotion:    CharacterEmotion
+  size?:      'sm' | 'md' | 'lg'
   className?: string
 }
 
 export function AvatarCharacter({
   config, emotion, size = 'lg', className = '',
 }: AvatarCharacterProps) {
+  const uid = useId().replace(/:/g, '')
   const [blinkPhase,  setBlinkPhase]  = useState(0)
   const [breathPhase, setBreathPhase] = useState(0)
   const tRef = useRef(0)
@@ -747,7 +416,8 @@ export function AvatarCharacter({
       className={className}
       style={{
         width: px, height: px * 1.3,
-        filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.22))',
+        filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.20))',
+        flexShrink: 0,
       }}
     >
       <AvatarSVG
@@ -755,12 +425,13 @@ export function AvatarCharacter({
         emotion={emotion}
         blinkPhase={blinkPhase}
         breathPhase={breathPhase}
+        uid={uid}
       />
     </div>
   )
 }
 
-// ─── AvatarEditor panel ──────────────────────────────────────────────────────
+// ─── AvatarEditor panel ───────────────────────────────────────────────────────
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -797,8 +468,10 @@ export function AvatarEditor({ config, onChange, onClose }: AvatarEditorProps) {
 
       {/* Name */}
       <div style={{ padding: '8px 16px 0' }}>
-        <label style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.38)',
-          letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        <label style={{
+          fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.38)',
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+        }}>
           Numele asistentului
         </label>
         <input
@@ -840,7 +513,8 @@ export function AvatarEditor({ config, onChange, onClose }: AvatarEditorProps) {
                     style={{
                       width: 26, height: 26, borderRadius: '50%', background: s.color,
                       border: `2.5px solid ${config.skinTone === s.id ? '#FFF' : 'transparent'}`,
-                      cursor: 'pointer', transform: config.skinTone === s.id ? 'scale(1.2)' : 'scale(1)',
+                      cursor: 'pointer',
+                      transform: config.skinTone === s.id ? 'scale(1.2)' : 'scale(1)',
                       transition: 'transform 0.1s',
                     }} />
                 ))}
@@ -854,7 +528,8 @@ export function AvatarEditor({ config, onChange, onClose }: AvatarEditorProps) {
                     style={{
                       width: 22, height: 22, borderRadius: '50%', background: c.color,
                       border: `2.5px solid ${config.eyeColor === c.id ? '#FFF' : 'transparent'}`,
-                      cursor: 'pointer', transform: config.eyeColor === c.id ? 'scale(1.2)' : 'scale(1)',
+                      cursor: 'pointer',
+                      transform: config.eyeColor === c.id ? 'scale(1.2)' : 'scale(1)',
                       transition: 'transform 0.1s',
                     }} />
                 ))}
@@ -885,7 +560,8 @@ export function AvatarEditor({ config, onChange, onClose }: AvatarEditorProps) {
                     style={{
                       width: 22, height: 22, borderRadius: '50%', background: c.color,
                       border: `2.5px solid ${config.hairColor === c.id ? '#FFF' : 'rgba(255,255,255,0.2)'}`,
-                      cursor: 'pointer', transform: config.hairColor === c.id ? 'scale(1.2)' : 'scale(1)',
+                      cursor: 'pointer',
+                      transform: config.hairColor === c.id ? 'scale(1.2)' : 'scale(1)',
                       transition: 'transform 0.1s',
                     }} />
                 ))}

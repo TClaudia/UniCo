@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { ChatMessage, LLMResponse } from '@/types'
 import { getProfile } from '@/lib/storage'
+import { saveConversation, StoredConversation } from '@/lib/storage'
 import { addPoints, unlockBadge } from '@/lib/gamification'
 import type { CharacterEmotion } from '@/components/avatar/AvatarCharacter'
 
@@ -11,8 +12,10 @@ interface UseChatReturn {
   messages: ChatMessage[]
   emotion: CharacterEmotion
   isLoading: boolean
+  currentConversationId: string
   sendMessage: (content: string) => Promise<void>
   clearMessages: () => void
+  loadConversation: (conv: StoredConversation) => void
 }
 
 const WELCOME_MESSAGE: ChatMessage = {
@@ -22,7 +25,6 @@ const WELCOME_MESSAGE: ChatMessage = {
   showDisclaimer: false,
 }
 
-// Maps LLM avatar_emotion values to CharacterEmotion values
 function mapAvatarEmotion(emotion: string): CharacterEmotion {
   const map: Record<string, CharacterEmotion> = {
     happy: 'happy',
@@ -35,13 +37,35 @@ function mapAvatarEmotion(emotion: string): CharacterEmotion {
   return (map[emotion] as CharacterEmotion) ?? 'idle'
 }
 
+function deriveTitle(messages: ChatMessage[]): string {
+  const first = messages.find(m => m.role === 'user')
+  if (!first) return 'Conversație nouă'
+  return first.content.length > 48
+    ? first.content.slice(0, 48) + '…'
+    : first.content
+}
+
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE])
   const [emotion, setEmotion] = useState<CharacterEmotion>('idle')
   const [isLoading, setIsLoading] = useState(false)
+  const [convId, setConvId] = useState<string>(() => uuidv4())
   const isFirstMessageRef = useRef(true)
-  // Keep a stable ref for the conversation history to avoid stale closures
   const messagesRef = useRef<ChatMessage[]>([WELCOME_MESSAGE])
+  const convIdRef = useRef<string>(convId)
+
+  const persistConversation = useCallback((msgs: ChatMessage[], id: string) => {
+    const userMessages = msgs.filter(m => m.id !== 'welcome' && m.role === 'user')
+    if (userMessages.length === 0) return
+    const conv: StoredConversation = {
+      id,
+      title: deriveTitle(msgs),
+      messages: msgs,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    saveConversation(conv)
+  }, [])
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isLoading) return
@@ -61,7 +85,6 @@ export function useChat(): UseChatReturn {
     try {
       const profile = getProfile()
 
-      // Build conversation history for API (exclude welcome message)
       const apiHistory = messagesRef.current
         .filter(m => m.id !== 'welcome')
         .map(m => ({ role: m.role, content: m.content }))
@@ -84,9 +107,7 @@ export function useChat(): UseChatReturn {
         }),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const data: LLMResponse = await response.json()
 
@@ -105,6 +126,8 @@ export function useChat(): UseChatReturn {
       messagesRef.current = withAssistant
       setMessages(withAssistant)
 
+      persistConversation(withAssistant, convIdRef.current)
+
       if (data.gamification_event) {
         const { points_awarded, badge_unlocked } = data.gamification_event
         if (points_awarded > 0) addPoints(points_awarded)
@@ -117,7 +140,6 @@ export function useChat(): UseChatReturn {
         addPoints(10)
       }
 
-      // Return emotion to listening after a few seconds
       setTimeout(() => setEmotion('listening'), 4000)
     } catch (err) {
       console.error('[useChat] error:', err)
@@ -136,14 +158,34 @@ export function useChat(): UseChatReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [isLoading])
+  }, [isLoading, persistConversation])
 
   const clearMessages = useCallback(() => {
+    const newId = uuidv4()
+    convIdRef.current = newId
+    setConvId(newId)
     messagesRef.current = [WELCOME_MESSAGE]
     setMessages([WELCOME_MESSAGE])
     setEmotion('idle')
     isFirstMessageRef.current = true
   }, [])
 
-  return { messages, emotion, isLoading, sendMessage, clearMessages }
+  const loadConversation = useCallback((conv: StoredConversation) => {
+    convIdRef.current = conv.id
+    setConvId(conv.id)
+    messagesRef.current = conv.messages
+    setMessages(conv.messages)
+    setEmotion('listening')
+    isFirstMessageRef.current = false
+  }, [])
+
+  return {
+    messages,
+    emotion,
+    isLoading,
+    currentConversationId: convId,
+    sendMessage,
+    clearMessages,
+    loadConversation,
+  }
 }

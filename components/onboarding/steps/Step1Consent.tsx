@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { OnboardingData } from '@/app/onboarding/page'
+import { AvatarCharacter, DEFAULT_AVATAR_CONFIG } from '@/components/avatar/AvatarCharacter'
 
 type ConsentData = OnboardingData['consent']
 
@@ -34,11 +35,9 @@ export function Step1Consent({ consent, onChange, onNext, onBack }: Step1Props) 
         animate={{ opacity: 1, y: 0 }}
         className="flex-1"
       >
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-2xl">
-            🔒
-          </div>
-          <div>
+        <div className="flex flex-col items-center mb-6 gap-3">
+          <AvatarCharacter config={DEFAULT_AVATAR_CONFIG} emotion="listening" size="sm" />
+          <div className="text-center">
             <h2 className="font-display font-bold text-xl text-uc-black">Protecția Datelor</h2>
             <p className="text-sm text-uc-gray-400">Citește și acceptă înainte de a continua</p>
           </div>

@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { IncomeBracket } from '@/types'
+import { AvatarCharacter, DEFAULT_AVATAR_CONFIG, CharacterEmotion } from '@/components/avatar/AvatarCharacter'
 
 interface Step3Props {
   income: IncomeBracket
@@ -55,7 +56,17 @@ const INCOME_OPTIONS: {
   },
 ]
 
+function getIncomeEmotion(income: IncomeBracket): CharacterEmotion {
+  if (!income) return 'listening'
+  if (income === 'under_3000') return 'empathetic'
+  if (income === '3000_5000') return 'thinking'
+  if (income === '5000_8000') return 'happy'
+  return 'idea'
+}
+
 export function Step3Income({ income, onChange, onNext, onBack }: Step3Props) {
+  const emotion = getIncomeEmotion(income)
+
   return (
     <div className="flex flex-col flex-1 px-6 py-8">
       <motion.div
@@ -63,6 +74,9 @@ export function Step3Income({ income, onChange, onNext, onBack }: Step3Props) {
         animate={{ opacity: 1, y: 0 }}
         className="flex-1"
       >
+        <div className="flex flex-col items-center mb-4">
+          <AvatarCharacter config={DEFAULT_AVATAR_CONFIG} emotion={emotion} size="sm" />
+        </div>
         <h2 className="font-display font-bold text-2xl text-uc-black mb-1">
           Care este venitul tău lunar?
         </h2>

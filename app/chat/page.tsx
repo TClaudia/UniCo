@@ -9,6 +9,7 @@ import {
 import type { AvatarConfig, CharacterEmotion } from '@/components/avatar/AvatarCharacter'
 import { useChat } from '@/hooks/useChat'
 import { getProfile } from '@/lib/storage'
+import { getConversations, deleteConversation, StoredConversation } from '@/lib/storage'
 
 const DEFAULT_CONFIG: AvatarConfig = {
   skinTone: 'medium', hairStyle: 'medium', hairColor: 'black',
@@ -23,26 +24,38 @@ const QUICK_ACTIONS = [
   'Transfer rapid',
 ]
 
-const HISTORY_ITEMS = [
-  { label: 'Conversație curentă',          active: true  },
-  { label: 'Economii și depozite — ieri',   active: false },
-  { label: 'Credit imobiliar — 13 mai',     active: false },
-  { label: 'Fonduri de investiții — 10 mai',active: false },
-  { label: 'Planificare pensie — 8 mai',    active: false },
-]
+function formatTime(iso?: string): string {
+  const d = iso ? new Date(iso) : new Date()
+  return d.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatHistoryDate(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000)
+  if (diffDays === 0) return 'Azi'
+  if (diffDays === 1) return 'Ieri'
+  return d.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' })
+}
 
 export default function ChatPage() {
   const router = useRouter()
-  const [mounted,         setMounted]         = useState(false)
-  const [showHistory,     setShowHistory]     = useState(false)
-  const [showAvatarEditor,setShowAvatarEditor]= useState(false)
-  const [avatarConfig,    setAvatarConfig]    = useState<AvatarConfig>(DEFAULT_CONFIG)
-  const [input,           setInput]           = useState('')
+  const [mounted,          setMounted]          = useState(false)
+  const [showHistory,      setShowHistory]      = useState(false)
+  const [showAvatarEditor, setShowAvatarEditor] = useState(false)
+  const [avatarConfig,     setAvatarConfig]     = useState<AvatarConfig>(DEFAULT_CONFIG)
+  const [input,            setInput]            = useState('')
+  const [conversations,    setConversations]    = useState<StoredConversation[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef       = useRef<HTMLInputElement>(null)
 
-  const { messages, emotion, isLoading, sendMessage, clearMessages } = useChat()
+  const { messages, emotion, isLoading, currentConversationId, sendMessage, clearMessages, loadConversation } = useChat()
   const emotionMeta = EMOTIONS[emotion] ?? EMOTIONS.idle
+
+  // Refresh conversation list from localStorage
+  const refreshHistory = useCallback(() => {
+    setConversations(getConversations())
+  }, [])
 
   useEffect(() => {
     setMounted(true)
@@ -51,7 +64,13 @@ export default function ChatPage() {
       const s = localStorage.getItem('uc_avatar_config')
       if (s) setAvatarConfig(JSON.parse(s))
     } catch {}
-  }, [router])
+    refreshHistory()
+  }, [router, refreshHistory])
+
+  // Re-read history whenever a conversation is persisted
+  useEffect(() => {
+    refreshHistory()
+  }, [messages, refreshHistory])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -77,46 +96,92 @@ export default function ChatPage() {
     })
   }
 
+  const handleNewChat = useCallback(() => {
+    clearMessages()
+    setShowHistory(false)
+    refreshHistory()
+    setTimeout(() => inputRef.current?.focus(), 100)
+  }, [clearMessages, refreshHistory])
+
+  const handleLoadConversation = useCallback((conv: StoredConversation) => {
+    loadConversation(conv)
+    setShowHistory(false)
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+  }, [loadConversation])
+
+  const handleDeleteConversation = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    deleteConversation(id)
+    refreshHistory()
+    if (currentConversationId === id) clearMessages()
+  }, [currentConversationId, clearMessages, refreshHistory])
+
   if (!mounted) return null
 
   return (
     <>
-      {/* ── Responsive styles ── */}
       <style>{`
         @keyframes bounce {
           0%,80%,100% { transform:translateY(0); opacity:.4 }
           40%          { transform:translateY(-6px); opacity:1 }
         }
         @keyframes spin { to { transform:rotate(360deg) } }
+        @keyframes pulseGlow {
+          0%,100% { box-shadow: 0 0 0 0 rgba(227,6,19,0.25) }
+          50%      { box-shadow: 0 0 0 8px rgba(227,6,19,0) }
+        }
         * { box-sizing:border-box }
         ::-webkit-scrollbar { width:4px }
         ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.1); border-radius:2px }
+        ::-webkit-scrollbar-track { background:transparent }
         input::placeholder { color:#9B9A96 }
 
-        /* ── Desktop layout ── */
         .chat-root {
           display:flex; height:100dvh; min-height:600px;
-          background:#F8F7F5;
+          background:#F0EFED;
           font-family:'DM Sans','Segoe UI',system-ui,sans-serif;
           overflow:hidden;
         }
-        .chat-left  { flex:1 1 0; display:flex; flex-direction:column; background:#FFF; border-right:1px solid #E2E0DC; position:relative; min-width:0 }
+
+        /* ── Left: chat panel ── */
+        .chat-left {
+          flex:1 1 0; display:flex; flex-direction:column;
+          background:#FAFAF8; border-right:1px solid rgba(0,0,0,0.06);
+          position:relative; min-width:0;
+          box-shadow: 2px 0 24px rgba(0,0,0,0.04);
+        }
+
+        /* ── Right: avatar panel (desktop) ── */
         .avatar-panel {
-          width:clamp(260px,28%,320px); flex-shrink:0;
+          width:clamp(280px,30%,340px); flex-shrink:0;
           display:flex; flex-direction:column;
-          background:linear-gradient(165deg,#1A1A2E 0%,#16213E 60%,#0F3460 100%);
+          background:linear-gradient(160deg,#0F1923 0%,#1A2535 45%,#0D2137 100%);
           position:relative; overflow:hidden;
         }
-        /* Mobile avatar bar — hidden on desktop */
+        .avatar-panel::before {
+          content:''; position:absolute; top:-80px; right:-80px;
+          width:280px; height:280px; border-radius:50%;
+          background:radial-gradient(circle, rgba(227,6,19,0.18) 0%, transparent 70%);
+          pointer-events:none;
+        }
+        .avatar-panel::after {
+          content:''; position:absolute; bottom:60px; left:-60px;
+          width:200px; height:200px; border-radius:50%;
+          background:radial-gradient(circle, rgba(58,123,213,0.12) 0%, transparent 70%);
+          pointer-events:none;
+        }
+
+        /* Mobile avatar bar */
         .mobile-avatar-bar { display:none }
 
-        /* ── Mobile (<= 720px) ── */
         @media(max-width:720px) {
           .avatar-panel { display:none }
+          .chat-root { background:#FFF }
+          .chat-left { box-shadow:none; border-right:none }
           .mobile-avatar-bar {
             display:flex; align-items:center; gap:12px;
             padding:10px 16px 8px;
-            background:linear-gradient(135deg,#1A1A2E,#0F3460);
+            background:linear-gradient(135deg,#0F1923,#0D2137);
             flex-shrink:0;
           }
         }
@@ -131,64 +196,67 @@ export default function ChatPage() {
 
           {/* ── Top header ── */}
           <div style={{
-            padding:'0 14px', height:58,
-            borderBottom:'1px solid #E2E0DC',
+            padding:'0 14px', height:60,
+            borderBottom:'1px solid rgba(0,0,0,0.06)',
             display:'flex', alignItems:'center', gap:8,
-            background:'#FFF', flexShrink:0,
+            background:'rgba(255,255,255,0.95)',
+            backdropFilter:'blur(8px)',
+            flexShrink:0,
+            position:'relative', zIndex:10,
           }}>
-            {/* Back */}
             <IconBtn onClick={() => router.push('/dashboard')} label="Înapoi">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <polyline points="15 18 9 12 15 6"/>
               </svg>
             </IconBtn>
 
-            {/* History */}
-            <IconBtn onClick={() => setShowHistory(h => !h)} label="Istoric"
-              active={showHistory}>
+            <IconBtn onClick={() => setShowHistory(h => !h)} label="Istoric" active={showHistory}>
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <line x1="3" y1="6" x2="21" y2="6"/>
-                <line x1="3" y1="12" x2="21" y2="12"/>
-                <line x1="3" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="12" x2="15" y2="12"/>
+                <line x1="3" y1="18" x2="18" y2="18"/>
               </svg>
             </IconBtn>
 
-            {/* Title */}
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontWeight:700, fontSize:14, color:'#1A1A2E', letterSpacing:'-0.2px' }}>
-                Uni<span style={{ color:'#E30613' }}>Co</span> — Coach Financiar AI
+              <div style={{ fontWeight:700, fontSize:14, color:'#0F1923', letterSpacing:'-0.2px' }}>
+                Uni<span style={{ color:'#E30613' }}>Co</span>
+                <span style={{ fontWeight:400, color:'#9B9A96', marginLeft:6, fontSize:13 }}>Coach Financiar AI</span>
               </div>
-              <div style={{ fontSize:10, color:'#9B9A96', marginTop:1 }}>
-                UniCredit Bank România · Securizat
+              <div style={{ fontSize:10, color:'#B0AEA8', marginTop:1, letterSpacing:'0.02em' }}>
+                UniCredit Bank România · Securizat SSL
               </div>
             </div>
 
             {/* Emotion chip */}
             <div style={{
               display:'flex', alignItems:'center', gap:5,
-              padding:'3px 9px', borderRadius:20, flexShrink:0,
-              background:`${emotionMeta.color}14`,
-              border:`1px solid ${emotionMeta.color}30`,
+              padding:'4px 10px', borderRadius:20, flexShrink:0,
+              background:`${emotionMeta.color}12`,
+              border:`1px solid ${emotionMeta.color}28`,
+              transition:'all 0.3s',
             }}>
-              <span style={{ width:6, height:6, borderRadius:'50%', background:emotionMeta.color, display:'inline-block' }}/>
-              <span style={{ fontSize:10, fontWeight:500, color:emotionMeta.color }}>{emotionMeta.label}</span>
+              <span style={{
+                width:6, height:6, borderRadius:'50%', background:emotionMeta.color,
+                display:'inline-block', animation:'pulseGlow 2s infinite',
+              }}/>
+              <span style={{ fontSize:10, fontWeight:600, color:emotionMeta.color }}>{emotionMeta.label}</span>
             </div>
 
-            {/* Clear */}
-            <IconBtn onClick={clearMessages} label="Conversație nouă" hoverColor="#E30613">
+            <IconBtn onClick={handleNewChat} label="Conversație nouă" hoverColor="#E30613">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <polyline points="1 4 1 10 7 10"/>
-                <path d="M3.51 15a9 9 0 1 0 .49-3.57"/>
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
             </IconBtn>
           </div>
 
-          {/* ── Mobile avatar banner (hidden on desktop via CSS) ── */}
+          {/* ── Mobile avatar banner ── */}
           <div className="mobile-avatar-bar">
             <AvatarCharacter config={avatarConfig} emotion={emotion} size="sm" />
             <div style={{ flex:1 }}>
               <div style={{ fontSize:14, fontWeight:700, color:'#FFF' }}>{avatarConfig.name}</div>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.55)', marginTop:2 }}>AI Financial Advisor</div>
+              <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)', marginTop:2 }}>AI Financial Advisor</div>
               <div style={{
                 display:'inline-flex', alignItems:'center', gap:4, marginTop:5,
                 padding:'2px 8px', borderRadius:20,
@@ -199,7 +267,6 @@ export default function ChatPage() {
                 <span style={{ fontSize:10, color:emotionMeta.color, fontWeight:500 }}>{emotionMeta.label}</span>
               </div>
             </div>
-            {/* Edit avatar on mobile */}
             <button
               onClick={() => setShowAvatarEditor(s => !s)}
               style={{
@@ -220,14 +287,10 @@ export default function ChatPage() {
                 initial={{ height:0, opacity:0 }}
                 animate={{ height:'auto', opacity:1 }}
                 exit={{ height:0, opacity:0 }}
-                style={{
-                  background:'linear-gradient(165deg,#1A1A2E,#0F3460)',
-                  overflow:'hidden', flexShrink:0,
-                }}
+                style={{ background:'linear-gradient(165deg,#0F1923,#0D2137)', overflow:'hidden', flexShrink:0 }}
               >
                 <div style={{ maxHeight:340, overflowY:'auto' }}>
-                  <AvatarEditor config={avatarConfig} onChange={updateConfig}
-                    onClose={() => setShowAvatarEditor(false)} />
+                  <AvatarEditor config={avatarConfig} onChange={updateConfig} onClose={() => setShowAvatarEditor(false)} />
                 </div>
               </motion.div>
             )}
@@ -236,87 +299,113 @@ export default function ChatPage() {
           {/* ── History drawer ── */}
           <AnimatePresence>
             {showHistory && (
-              <motion.div
-                initial={{ x:-280, opacity:0 }}
-                animate={{ x:0, opacity:1 }}
-                exit={{ x:-280, opacity:0 }}
-                transition={{ type:'spring', stiffness:300, damping:30 }}
-                style={{
-                  position:'absolute', top:58, left:0, zIndex:30,
-                  width:252, height:'calc(100% - 58px)',
-                  background:'#FFF',
-                  boxShadow:'4px 0 24px rgba(0,0,0,0.1)',
-                  borderRight:'1px solid #E2E0DC',
-                  display:'flex', flexDirection:'column',
-                }}
-              >
-                <div style={{ padding:'13px 16px 9px', borderBottom:'1px solid #F0EFED' }}>
-                  <span style={{ fontSize:11, fontWeight:600, color:'#9B9A96', letterSpacing:'0.08em', textTransform:'uppercase' }}>
-                    Conversații recente
-                  </span>
-                </div>
-                <div style={{ flex:1, overflowY:'auto' }}>
-                  {HISTORY_ITEMS.map((item, i) => (
-                    <div key={i}
+              <>
+                {/* Backdrop */}
+                <motion.div
+                  initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                  onClick={() => setShowHistory(false)}
+                  style={{
+                    position:'absolute', inset:0, zIndex:25,
+                    background:'rgba(0,0,0,0.18)', backdropFilter:'blur(2px)',
+                    top:60,
+                  }}
+                />
+                <motion.div
+                  initial={{ x:-280, opacity:0 }}
+                  animate={{ x:0, opacity:1 }}
+                  exit={{ x:-280, opacity:0 }}
+                  transition={{ type:'spring', stiffness:320, damping:32 }}
+                  style={{
+                    position:'absolute', top:60, left:0, zIndex:30,
+                    width:268, height:'calc(100% - 60px)',
+                    background:'#FFF',
+                    boxShadow:'6px 0 32px rgba(0,0,0,0.12)',
+                    borderRight:'1px solid rgba(0,0,0,0.06)',
+                    display:'flex', flexDirection:'column',
+                  }}
+                >
+                  <div style={{
+                    padding:'14px 16px 10px',
+                    borderBottom:'1px solid #F0EFED',
+                    display:'flex', alignItems:'center', justifyContent:'space-between',
+                  }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:'#9B9A96', letterSpacing:'0.08em', textTransform:'uppercase' }}>
+                      Conversații
+                    </span>
+                    <button
+                      onClick={handleNewChat}
                       style={{
-                        padding:'11px 16px', fontSize:13, cursor:'pointer',
-                        color: item.active ? '#E30613' : '#5A5956',
-                        background: item.active ? 'rgba(227,6,19,0.05)' : 'transparent',
-                        borderLeft: item.active ? '2px solid #E30613' : '2px solid transparent',
-                      }}
-                      onMouseEnter={e => { if (!item.active)(e.currentTarget as HTMLDivElement).style.background = '#F0EFED' }}
-                      onMouseLeave={e => { if (!item.active)(e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
-                    >
-                      {item.label}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ padding:'12px 16px', borderTop:'1px solid #F0EFED' }}>
-                  <button
-                    onClick={() => { clearMessages(); setShowHistory(false) }}
-                    style={{
-                      width:'100%', padding:'8px 12px', borderRadius:8,
-                      border:'1px solid #E2E0DC', background:'none',
-                      color:'#5A5956', fontSize:12, cursor:'pointer',
-                      display:'flex', alignItems:'center', gap:6, justifyContent:'center',
-                    }}>
-                    + Conversație nouă
-                  </button>
-                </div>
-              </motion.div>
+                        padding:'4px 10px', borderRadius:8,
+                        border:'1px solid #E30613', background:'none',
+                        color:'#E30613', fontSize:11, fontWeight:600, cursor:'pointer',
+                        display:'flex', alignItems:'center', gap:5,
+                      }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                      Nou
+                    </button>
+                  </div>
+
+                  <div style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
+                    {conversations.length === 0 ? (
+                      <div style={{ padding:'24px 16px', textAlign:'center', color:'#B0AEA8', fontSize:13 }}>
+                        <div style={{ fontSize:24, marginBottom:8 }}>💬</div>
+                        Nicio conversație salvată încă.<br />Trimite primul mesaj!
+                      </div>
+                    ) : (
+                      conversations.map(conv => (
+                        <HistoryItem
+                          key={conv.id}
+                          conv={conv}
+                          isActive={conv.id === currentConversationId}
+                          onClick={() => handleLoadConversation(conv)}
+                          onDelete={(e) => handleDeleteConversation(conv.id, e)}
+                        />
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              </>
             )}
           </AnimatePresence>
 
           {/* ── Disclaimer ── */}
           <div style={{
             padding:'5px 16px',
-            background:'rgba(245,158,11,0.08)',
-            borderBottom:'1px solid rgba(245,158,11,0.18)',
+            background:'rgba(245,158,11,0.07)',
+            borderBottom:'1px solid rgba(245,158,11,0.15)',
             flexShrink:0,
           }}>
-            <p style={{ fontSize:11, color:'#92400e', margin:0, lineHeight:1.5 }}>
+            <p style={{ fontSize:11, color:'#92400E', margin:0, lineHeight:1.5 }}>
               ⚠️ <strong>Informare:</strong> Recomandările AI au caracter informativ și nu constituie consultanță financiară certificată.
             </p>
           </div>
 
           {/* ── Messages ── */}
           <div style={{
-            flex:1, overflowY:'auto', padding:'16px 18px',
-            display:'flex', flexDirection:'column', gap:14,
-            scrollbarWidth:'thin', scrollbarColor:'#E2E0DC transparent',
+            flex:1, overflowY:'auto', padding:'20px 20px 8px',
+            display:'flex', flexDirection:'column', gap:16,
+            scrollbarWidth:'thin', scrollbarColor:'rgba(0,0,0,0.1) transparent',
           }}>
             {messages.length === 1 && messages[0].id === 'welcome' && (
-              <p style={{ textAlign:'center', color:'#9B9A96', fontSize:12, margin:0 }}>
+              <motion.p
+                initial={{ opacity:0 }} animate={{ opacity:1 }}
+                style={{ textAlign:'center', color:'#B0AEA8', fontSize:12, margin:'8px 0 0' }}>
                 Folosește sugestiile de mai jos sau scrie propria ta întrebare
-              </p>
+              </motion.p>
             )}
 
             <AnimatePresence initial={false}>
-              {messages.map(msg => (
+              {messages.map((msg, idx) => (
                 <motion.div key={msg.id}
-                  initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-                  exit={{ opacity:0 }} transition={{ duration:0.2 }}>
-                  <MsgBubble msg={msg} initial={avatarConfig.name[0] ?? 'A'} />
+                  initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
+                  exit={{ opacity:0 }} transition={{ duration:0.2, ease:'easeOut' }}>
+                  <MsgBubble
+                    msg={msg}
+                    initial={avatarConfig.name[0] ?? 'A'}
+                    showAvatar={msg.role === 'assistant' && (idx === 0 || messages[idx-1]?.role !== 'assistant')}
+                  />
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -324,18 +413,20 @@ export default function ChatPage() {
             <AnimatePresence>
               {isLoading && (
                 <motion.div key="typing"
-                  initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+                  initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
                   exit={{ opacity:0 }}
-                  style={{ display:'flex', alignItems:'flex-end', gap:8 }}>
+                  style={{ display:'flex', alignItems:'flex-end', gap:10 }}>
                   <AvatarThumb initial={avatarConfig.name[0] ?? 'A'} />
                   <div style={{
-                    padding:'11px 15px', borderRadius:'18px 18px 18px 4px',
-                    background:'#F0EFED', display:'flex', gap:5, alignItems:'center',
+                    padding:'12px 16px', borderRadius:'18px 18px 18px 4px',
+                    background:'#F0EFED',
+                    display:'flex', gap:5, alignItems:'center',
+                    boxShadow:'0 1px 4px rgba(0,0,0,0.06)',
                   }}>
                     {[0,1,2].map(i => (
                       <div key={i} style={{
-                        width:7, height:7, borderRadius:'50%', background:'#9B9A96',
-                        animation:`bounce 1.2s ${i*0.2}s ease-in-out infinite`,
+                        width:7, height:7, borderRadius:'50%', background:'#C0BEB8',
+                        animation:`bounce 1.3s ${i*0.22}s ease-in-out infinite`,
                       }}/>
                     ))}
                   </div>
@@ -348,16 +439,21 @@ export default function ChatPage() {
 
           {/* ── Quick actions ── */}
           <div style={{
-            padding:'7px 16px 0', display:'flex', gap:6,
-            overflowX:'auto', scrollbarWidth:'none', flexShrink:0,
+            padding:'8px 20px 0',
+            display:'flex', gap:7,
+            overflowX:'auto', scrollbarWidth:'none',
+            flexShrink:0,
           }}>
             {QUICK_ACTIONS.map(q => (
-              <Chip key={q} label={q} onClick={() => { setInput(q); inputRef.current?.focus() }}/>
+              <Chip key={q} label={q} onClick={() => {
+                setInput(q)
+                inputRef.current?.focus()
+              }}/>
             ))}
           </div>
 
           {/* ── Input bar ── */}
-          <div style={{ padding:'9px 16px 13px', flexShrink:0 }}>
+          <div style={{ padding:'10px 20px 16px', flexShrink:0 }}>
             <InputBar
               inputRef={inputRef}
               value={input}
@@ -370,34 +466,35 @@ export default function ChatPage() {
         </div>
 
         {/* ══════════════════════════════════════════
-            RIGHT PANEL — Avatar (desktop only via CSS)
+            RIGHT PANEL — Avatar (desktop only)
         ══════════════════════════════════════════ */}
         <div className="avatar-panel">
-          {/* Decorative blobs */}
-          <div style={{ position:'absolute', top:-60, right:-60, width:200, height:200, borderRadius:'50%', background:'rgba(227,6,19,0.10)', pointerEvents:'none' }}/>
-          <div style={{ position:'absolute', bottom:80, left:-40, width:160, height:160, borderRadius:'50%', background:'rgba(255,255,255,0.04)', pointerEvents:'none' }}/>
 
           {/* Panel header */}
           <div style={{
-            padding:'0 16px', height:58, flexShrink:0,
+            padding:'0 18px', height:60, flexShrink:0,
             display:'flex', alignItems:'center', justifyContent:'space-between',
-            borderBottom:'1px solid rgba(255,255,255,0.07)',
+            borderBottom:'1px solid rgba(255,255,255,0.06)',
+            position:'relative', zIndex:1,
           }}>
             <div>
-              <div style={{ fontSize:13, fontWeight:600, color:'#FFF', letterSpacing:'0.01em' }}>
+              <div style={{ fontSize:14, fontWeight:700, color:'#FFF', letterSpacing:'-0.2px' }}>
                 {avatarConfig.name}
+                <span style={{ fontSize:11, fontWeight:400, color:'rgba(255,255,255,0.4)', marginLeft:7 }}>
+                  AI Coach
+                </span>
               </div>
-              <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', marginTop:1 }}>
-                AI Financial Advisor
+              <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginTop:2, letterSpacing:'0.03em' }}>
+                UniCredit Bank România
               </div>
             </div>
             <button
               onClick={() => setShowAvatarEditor(s => !s)}
               title="Editează avatarul"
               style={{
-                width:32, height:32, borderRadius:8, cursor:'pointer',
-                background: showAvatarEditor ? '#E30613' : 'rgba(255,255,255,0.1)',
-                border:`1px solid ${showAvatarEditor ? '#E30613' : 'rgba(255,255,255,0.15)'}`,
+                width:34, height:34, borderRadius:9, cursor:'pointer',
+                background: showAvatarEditor ? '#E30613' : 'rgba(255,255,255,0.08)',
+                border:`1px solid ${showAvatarEditor ? '#E30613' : 'rgba(255,255,255,0.12)'}`,
                 display:'flex', alignItems:'center', justifyContent:'center',
                 color:'#FFF', transition:'all 0.2s',
               }}>
@@ -407,53 +504,91 @@ export default function ChatPage() {
             </button>
           </div>
 
-          {/* Avatar display */}
+          {/* Avatar display / editor */}
           {!showAvatarEditor ? (
             <div style={{
               flex:1, display:'flex', flexDirection:'column',
               alignItems:'center', justifyContent:'center',
-              padding:'0 20px 24px', position:'relative',
+              padding:'0 24px 32px', position:'relative', zIndex:1,
+              gap:0,
             }}>
-              <AvatarCharacter config={avatarConfig} emotion={emotion} size="lg"/>
+              {/* Avatar with subtle platform */}
+              <div style={{ position:'relative', marginBottom:4 }}>
+                <div style={{
+                  position:'absolute', bottom:-16, left:'50%', transform:'translateX(-50%)',
+                  width:120, height:18, borderRadius:'50%',
+                  background:'rgba(0,0,0,0.25)', filter:'blur(8px)',
+                }}/>
+                <AvatarCharacter config={avatarConfig} emotion={emotion} size="lg"/>
+              </div>
 
               {/* Emotion badge */}
               <div style={{
-                marginTop:14, padding:'5px 14px', borderRadius:20,
-                background:`${emotionMeta.color}20`,
-                border:`1px solid ${emotionMeta.color}40`,
-                display:'flex', alignItems:'center', gap:6,
+                marginTop:20, padding:'6px 16px', borderRadius:24,
+                background:`${emotionMeta.color}18`,
+                border:`1px solid ${emotionMeta.color}35`,
+                display:'flex', alignItems:'center', gap:7,
+                backdropFilter:'blur(4px)',
               }}>
                 <span style={{
-                  width:6, height:6, borderRadius:'50%', display:'inline-block',
-                  background:emotionMeta.color, boxShadow:`0 0 7px ${emotionMeta.color}`,
+                  width:7, height:7, borderRadius:'50%', display:'inline-block',
+                  background:emotionMeta.color, boxShadow:`0 0 8px ${emotionMeta.color}`,
+                  animation:'pulseGlow 2s infinite',
                 }}/>
-                <span style={{ fontSize:11, fontWeight:500, color:emotionMeta.color, letterSpacing:'0.03em' }}>
+                <span style={{ fontSize:12, fontWeight:600, color:emotionMeta.color, letterSpacing:'0.03em' }}>
                   {emotionMeta.label}
                 </span>
               </div>
 
-              {/* Emotion quick-set */}
-              <div style={{
-                marginTop:14, width:'100%',
-                display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:4,
-              }}>
-                {(Object.entries(EMOTIONS) as [CharacterEmotion, { label:string; color:string }][]).map(([k, v]) => (
-                  <button key={k} title={v.label}
-                    style={{
-                      padding:'5px 2px', borderRadius:6, fontSize:9, fontWeight:500,
-                      cursor:'pointer', transition:'all 0.15s',
-                      border:`1px solid ${emotion === k ? v.color : 'rgba(255,255,255,0.1)'}`,
-                      background: emotion === k ? `${v.color}22` : 'rgba(255,255,255,0.04)',
-                      color: emotion === k ? v.color : 'rgba(255,255,255,0.4)',
-                    }}>
-                    {v.label}
-                  </button>
+              {/* Divider */}
+              <div style={{ width:'100%', height:1, background:'rgba(255,255,255,0.06)', margin:'18px 0 14px' }}/>
+
+              {/* Stats row */}
+              <div style={{ display:'flex', gap:8, width:'100%' }}>
+                {[
+                  { label:'Mesaje', value: messages.filter(m=>m.id!=='welcome').length },
+                  { label:'Conversații', value: conversations.length },
+                ].map(s => (
+                  <div key={s.label} style={{
+                    flex:1, padding:'10px 8px', borderRadius:10,
+                    background:'rgba(255,255,255,0.05)',
+                    border:'1px solid rgba(255,255,255,0.08)',
+                    textAlign:'center',
+                  }}>
+                    <div style={{ fontSize:18, fontWeight:700, color:'#FFF' }}>{s.value}</div>
+                    <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', marginTop:2 }}>{s.label}</div>
+                  </div>
                 ))}
+              </div>
+
+              {/* Emotion quick-set */}
+              <div style={{ marginTop:14, width:'100%' }}>
+                <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginBottom:7, textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600 }}>
+                  Stare
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:5 }}>
+                  {(Object.entries(EMOTIONS) as [CharacterEmotion, { label:string; color:string }][]).map(([k, v]) => (
+                    <div key={k} title={v.label}
+                      style={{
+                        padding:'6px 2px', borderRadius:7, fontSize:9, fontWeight:600,
+                        textAlign:'center',
+                        border:`1px solid ${emotion === k ? v.color : 'rgba(255,255,255,0.08)'}`,
+                        background: emotion === k ? `${v.color}20` : 'rgba(255,255,255,0.03)',
+                        color: emotion === k ? v.color : 'rgba(255,255,255,0.35)',
+                        transition:'all 0.2s',
+                        letterSpacing:'0.02em',
+                      }}>
+                      {v.label}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
-            <AvatarEditor config={avatarConfig} onChange={updateConfig}
-              onClose={() => setShowAvatarEditor(false)} />
+            <div style={{ flex:1, overflowY:'auto', position:'relative', zIndex:1 }}>
+              <AvatarEditor config={avatarConfig} onChange={updateConfig}
+                onClose={() => setShowAvatarEditor(false)} />
+            </div>
           )}
         </div>
 
@@ -462,7 +597,61 @@ export default function ChatPage() {
   )
 }
 
-// ─── Small sub-components ────────────────────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function HistoryItem({
+  conv, isActive, onClick, onDelete,
+}: {
+  conv: StoredConversation
+  isActive: boolean
+  onClick: () => void
+  onDelete: (e: React.MouseEvent) => void
+}) {
+  const [hover, setHover] = useState(false)
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding:'10px 16px', fontSize:13, cursor:'pointer',
+        display:'flex', alignItems:'flex-start', gap:8,
+        color: isActive ? '#E30613' : '#5A5956',
+        background: isActive ? 'rgba(227,6,19,0.05)' : hover ? '#F8F7F5' : 'transparent',
+        borderLeft: `2px solid ${isActive ? '#E30613' : 'transparent'}`,
+        transition:'all 0.15s',
+      }}>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{
+          fontWeight: isActive ? 600 : 500,
+          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+          fontSize:13,
+        }}>
+          {conv.title}
+        </div>
+        <div style={{ fontSize:11, color:'#B0AEA8', marginTop:3 }}>
+          {formatHistoryDate(conv.updatedAt)} · {conv.messages.filter(m=>m.role==='user').length} mesaje
+        </div>
+      </div>
+      {hover && (
+        <button
+          onClick={onDelete}
+          style={{
+            background:'none', border:'none', cursor:'pointer', padding:'2px 4px',
+            color:'#C0BEB8', flexShrink:0, borderRadius:4,
+            display:'flex', alignItems:'center',
+          }}
+          title="Șterge">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6M14 11v6"/>
+          </svg>
+        </button>
+      )}
+    </div>
+  )
+}
 
 function IconBtn({
   onClick, label, active, hoverColor, children,
@@ -479,10 +668,10 @@ function IconBtn({
       title={label}
       aria-label={label}
       style={{
-        width:33, height:33, borderRadius:8, border:'none', cursor:'pointer',
+        width:34, height:34, borderRadius:8, border:'none', cursor:'pointer',
         background: active ? '#F0EFED' : 'none',
         display:'flex', alignItems:'center', justifyContent:'center',
-        color:'#5A5956', flexShrink:0, transition:'background 0.15s, color 0.15s',
+        color:'#6A6866', flexShrink:0, transition:'background 0.15s, color 0.15s',
       }}
       onMouseEnter={e => {
         const b = e.currentTarget as HTMLButtonElement
@@ -492,7 +681,7 @@ function IconBtn({
       onMouseLeave={e => {
         const b = e.currentTarget as HTMLButtonElement
         b.style.background = active ? '#F0EFED' : 'none'
-        b.style.color = '#5A5956'
+        b.style.color = '#6A6866'
       }}
     >
       {children}
@@ -503,9 +692,11 @@ function IconBtn({
 function AvatarThumb({ initial }: { initial: string }) {
   return (
     <div style={{
-      width:28, height:28, borderRadius:'50%', background:'#E30613',
+      width:30, height:30, borderRadius:'50%',
+      background:'linear-gradient(135deg,#E30613,#B5001A)',
       display:'flex', alignItems:'center', justifyContent:'center',
-      flexShrink:0, fontSize:11, fontWeight:700, color:'#FFF',
+      flexShrink:0, fontSize:12, fontWeight:700, color:'#FFF',
+      boxShadow:'0 2px 8px rgba(227,6,19,0.3)',
     }}>
       {initial}
     </div>
@@ -516,13 +707,24 @@ function Chip({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button onClick={onClick}
       style={{
-        flexShrink:0, padding:'5px 11px', borderRadius:20,
-        border:'1px solid #E2E0DC', background:'#FFF',
-        fontSize:12, color:'#5A5956', cursor:'pointer',
+        flexShrink:0, padding:'6px 13px', borderRadius:20,
+        border:'1px solid rgba(0,0,0,0.1)', background:'#FFF',
+        fontSize:12, color:'#6A6866', cursor:'pointer',
         whiteSpace:'nowrap', transition:'all 0.15s',
+        boxShadow:'0 1px 3px rgba(0,0,0,0.05)',
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor='#E30613'; (e.currentTarget as HTMLButtonElement).style.color='#E30613' }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor='#E2E0DC'; (e.currentTarget as HTMLButtonElement).style.color='#5A5956' }}
+      onMouseEnter={e => {
+        const b = e.currentTarget as HTMLButtonElement
+        b.style.borderColor='#E30613'
+        b.style.color='#E30613'
+        b.style.background='rgba(227,6,19,0.04)'
+      }}
+      onMouseLeave={e => {
+        const b = e.currentTarget as HTMLButtonElement
+        b.style.borderColor='rgba(0,0,0,0.1)'
+        b.style.color='#6A6866'
+        b.style.background='#FFF'
+      }}
     >
       {label}
     </button>
@@ -537,17 +739,28 @@ interface InputBarProps {
   isLoading: boolean
   inputRef: React.RefObject<HTMLInputElement>
 }
-const InputBar = ({ value, onChange, onKeyDown, onSend, isLoading, inputRef }: InputBarProps) => {
+
+function InputBar({ value, onChange, onKeyDown, onSend, isLoading, inputRef }: InputBarProps) {
   return (
     <div
       style={{
         display:'flex', alignItems:'center', gap:8,
-        background:'#F0EFED', borderRadius:26,
-        padding:'4px 6px 4px 14px',
-        border:'1.5px solid #E2E0DC', transition:'border-color 0.2s',
+        background:'#FFF', borderRadius:28,
+        padding:'5px 5px 5px 16px',
+        border:'1.5px solid rgba(0,0,0,0.1)',
+        boxShadow:'0 2px 12px rgba(0,0,0,0.07)',
+        transition:'border-color 0.2s, box-shadow 0.2s',
       }}
-      onFocusCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor='#E30613' }}
-      onBlurCapture={e  => { (e.currentTarget as HTMLDivElement).style.borderColor='#E2E0DC' }}
+      onFocusCapture={e => {
+        const el = e.currentTarget as HTMLDivElement
+        el.style.borderColor='#E30613'
+        el.style.boxShadow='0 2px 12px rgba(227,6,19,0.12)'
+      }}
+      onBlurCapture={e => {
+        const el = e.currentTarget as HTMLDivElement
+        el.style.borderColor='rgba(0,0,0,0.1)'
+        el.style.boxShadow='0 2px 12px rgba(0,0,0,0.07)'
+      }}
     >
       <input
         ref={inputRef}
@@ -558,7 +771,7 @@ const InputBar = ({ value, onChange, onKeyDown, onSend, isLoading, inputRef }: I
         disabled={isLoading}
         style={{
           flex:1, background:'none', border:'none', outline:'none',
-          fontSize:14, color:'#1A1A2E',
+          fontSize:14, color:'#1A1A2E', lineHeight:1.4,
           fontFamily:"'DM Sans','Segoe UI',system-ui,sans-serif",
         }}
       />
@@ -566,21 +779,24 @@ const InputBar = ({ value, onChange, onKeyDown, onSend, isLoading, inputRef }: I
         onClick={onSend}
         disabled={!value.trim() || isLoading}
         style={{
-          width:38, height:38, borderRadius:'50%', border:'none',
-          background: value.trim() && !isLoading ? '#E30613' : '#D8D6D2',
+          width:40, height:40, borderRadius:'50%', border:'none',
+          background: value.trim() && !isLoading
+            ? 'linear-gradient(135deg,#E30613,#B5001A)'
+            : '#E8E6E2',
           cursor: value.trim() && !isLoading ? 'pointer' : 'default',
           display:'flex', alignItems:'center', justifyContent:'center',
           flexShrink:0, transition:'all 0.2s',
+          boxShadow: value.trim() && !isLoading ? '0 3px 10px rgba(227,6,19,0.35)' : 'none',
         }}>
         {isLoading ? (
           <div style={{
-            width:14, height:14, borderRadius:'50%',
+            width:15, height:15, borderRadius:'50%',
             border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#FFF',
             animation:'spin 0.7s linear infinite',
           }}/>
         ) : (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke={value.trim() ? '#FFF' : '#9B9A96'}
+            stroke={value.trim() ? '#FFF' : '#B0AEA8'}
             strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"/>
             <polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -596,40 +812,63 @@ type MsgType = {
   product?: string|null;
   cta?: { label:string; url:string; type:string }|null;
   showDisclaimer?: boolean;
+  timestamp?: string;
 }
 
-function MsgBubble({ msg, initial }: { msg: MsgType; initial: string }) {
+function MsgBubble({ msg, initial, showAvatar }: { msg: MsgType; initial: string; showAvatar: boolean }) {
   const isUser = msg.role === 'user'
+  const time = formatTime()
+
   return (
-    <div style={{ display:'flex', flexDirection: isUser ? 'row-reverse' : 'row', alignItems:'flex-end', gap:8 }}>
-      {!isUser && <AvatarThumb initial={initial}/>}
+    <div style={{ display:'flex', flexDirection: isUser ? 'row-reverse' : 'row', alignItems:'flex-end', gap:10 }}>
+      {!isUser && (
+        showAvatar
+          ? <AvatarThumb initial={initial}/>
+          : <div style={{ width:30, flexShrink:0 }}/>
+      )}
       <div style={{
-        maxWidth:'74%', display:'flex', flexDirection:'column', gap:6,
+        maxWidth:'72%', display:'flex', flexDirection:'column', gap:6,
         alignItems: isUser ? 'flex-end' : 'flex-start',
       }}>
         {/* Bubble */}
         <div style={{
-          padding:'11px 15px',
-          borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-          background: isUser ? '#1A1A2E' : '#F0EFED',
-          color: isUser ? '#FFF' : '#1A1A2E',
-          fontSize:14, lineHeight:1.55, letterSpacing:'-0.1px',
+          padding:'12px 16px',
+          borderRadius: isUser ? '20px 20px 4px 20px' : '4px 20px 20px 20px',
+          background: isUser
+            ? 'linear-gradient(135deg,#1A2535,#0F1923)'
+            : '#F0EFED',
+          color: isUser ? '#FFF' : '#1A2535',
+          fontSize:14, lineHeight:1.6, letterSpacing:'-0.1px',
+          boxShadow: isUser
+            ? '0 3px 12px rgba(15,25,35,0.2)'
+            : '0 1px 4px rgba(0,0,0,0.06)',
         }}>
           {msg.content}
           {!isUser && msg.product && (
-            <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid rgba(0,0,0,0.08)', fontSize:12, color:'#3A7BD5', fontWeight:500 }}>
-              📦 {msg.product}
+            <div style={{
+              marginTop:10, paddingTop:10,
+              borderTop:'1px solid rgba(0,0,0,0.07)',
+              fontSize:12, color:'#3A7BD5', fontWeight:600,
+              display:'flex', alignItems:'center', gap:5,
+            }}>
+              <span style={{ fontSize:14 }}>📦</span>
+              {msg.product.replace(/_/g, ' ')}
             </div>
           )}
+        </div>
+
+        {/* Timestamp */}
+        <div style={{ fontSize:10, color:'#C0BEB8', padding:'0 4px' }}>
+          {time}
         </div>
 
         {/* Disclaimer */}
         {!isUser && msg.showDisclaimer && (
           <div style={{
-            padding:'7px 11px',
-            background:'rgba(245,158,11,0.1)',
-            border:'1px solid rgba(245,158,11,0.28)',
-            borderRadius:10, fontSize:11, color:'#92400e', lineHeight:1.5,
+            padding:'8px 12px',
+            background:'rgba(245,158,11,0.08)',
+            border:'1px solid rgba(245,158,11,0.22)',
+            borderRadius:12, fontSize:11, color:'#92400E', lineHeight:1.55,
           }}>
             ⚠️ Recomandare informativă — nu constituie consultanță financiară.
           </div>
@@ -637,24 +876,39 @@ function MsgBubble({ msg, initial }: { msg: MsgType; initial: string }) {
 
         {/* CTA */}
         {!isUser && msg.cta && (
-          <div style={{ display:'flex', flexDirection:'column', gap:5, width:'100%' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:6, width:'100%' }}>
             <a href={msg.cta.url} target="_blank" rel="noopener noreferrer"
               style={{
-                display:'flex', alignItems:'center', justifyContent:'center',
-                background:'#E30613', color:'#FFF', padding:'10px 16px',
-                borderRadius:10, fontSize:13, fontWeight:600, textDecoration:'none',
-                transition:'opacity 0.15s',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                background:'linear-gradient(135deg,#E30613,#B5001A)',
+                color:'#FFF', padding:'11px 18px',
+                borderRadius:12, fontSize:13, fontWeight:700, textDecoration:'none',
+                boxShadow:'0 3px 12px rgba(227,6,19,0.3)',
+                transition:'opacity 0.15s, transform 0.15s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.opacity='0.88' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.opacity='1'   }}>
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLAnchorElement).style.opacity='0.9'
+                ;(e.currentTarget as HTMLAnchorElement).style.transform='translateY(-1px)'
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLAnchorElement).style.opacity='1'
+                ;(e.currentTarget as HTMLAnchorElement).style.transform='translateY(0)'
+              }}>
               {msg.cta.label} →
             </a>
             <a href="https://www.unicredit.ro/contact.html" target="_blank" rel="noopener noreferrer"
               style={{
-                display:'flex', alignItems:'center', justifyContent:'center',
-                border:'1px solid #E30613', color:'#E30613',
-                padding:'9px 16px', borderRadius:10,
+                display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                border:'1.5px solid rgba(227,6,19,0.3)', color:'#E30613',
+                padding:'10px 18px', borderRadius:12,
                 fontSize:12, fontWeight:500, textDecoration:'none',
+                transition:'all 0.15s',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background='rgba(227,6,19,0.05)'
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background='transparent'
               }}>
               👤 Consultă un Specialist Uman
             </a>
