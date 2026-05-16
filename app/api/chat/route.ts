@@ -64,11 +64,6 @@ const PRODUCT_CATALOG: Record<string, {
     url: 'https://www.unicredit.ro/ro/persoane-fizice/Credite/credite-ipoteca.html',
     type: 'product_page',
   },
-  credit_nevoi_personale: {
-    label: 'Credit de nevoi personale',
-    url: 'https://www.unicredit.ro/ro/persoane-fizice/Credite/Am-gasit-casa.html',
-    type: 'product_page',
-  },
   fonduri_investitii: {
     label: 'Fonduri de investiții',
     url: 'https://www.unicredit.ro/ro/persoane-fizice/Economisire-si-investitii/fonduri-de-investitii.html',
@@ -341,15 +336,7 @@ UNICREDIT_PRODUCTS_LIST (Official Catalog)
    Use for: achiziție imobiliară, Prima Casă, Casa Verde sau refinanțare
    Key: credit_imobiliar
 
-9. Credit de nevoi personale
-   Use for: finanțare flexibilă pentru cheltuieli personale
-   Key: credit_nevoi_personale
-
-10. Fonduri de investiții
-    Use for: investiții diversificate locale și internaționale
-    Key: fonduri_investitii
-
-11. Plan de Investiții (RITM)
+9. Fonduri de investiții
     Use for: investiții regulate prin debitare automată
     Key: plan_investitii
 
