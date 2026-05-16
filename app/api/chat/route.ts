@@ -547,8 +547,11 @@ async function callGeminiWithKey(
         contents,
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 1500,
+          maxOutputTokens: 2048,
           responseMimeType: 'application/json',
+          // Disable thinking for Gemini 2.5 Flash — thinking tokens consume the
+          // output budget before the JSON is complete, causing MAX_TOKENS truncation.
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     },

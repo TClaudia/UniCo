@@ -83,7 +83,7 @@ export default function DashboardPage() {
 
   return (
     <PageWrapper>
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 py-4 space-y-4 lg:px-8 lg:py-6 lg:max-w-3xl lg:mx-auto">
         {/* Welcome Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

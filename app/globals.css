@@ -109,6 +109,24 @@ input[type='range']::-moz-range-thumb {
   padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
 }
 
+/* Splash screen logo shimmer */
+@keyframes splashShimmer {
+  0%   { transform: translateX(-160%) skewX(-18deg); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translateX(200%) skewX(-18deg); opacity: 0; }
+}
+
+.splash-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.7) 50%,
+    transparent 100%
+  );
+  animation: splashShimmer 1.8s ease-in-out infinite;
+  animation-delay: 0.6s;
+}
+
 /* Page transition */
 .page-enter {
   opacity: 0;
