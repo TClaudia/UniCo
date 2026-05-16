@@ -19,44 +19,209 @@ interface LLMRawResponse {
 const PRODUCT_CATALOG: Record<string, {
   label: string; url: string; type: 'product_page' | 'contact_advisor' | 'calculator'
 }> = {
+  cont_curent_online: {
+    label: 'Cont curent',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asistenta/cont-curent.html',
+    type: 'product_page',
+  },
+  cont_economii: {
+    label: 'Conturi de economii',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asistenta/conturi-de-economii-si-depozite-la-termen.html',
+    type: 'product_page',
+  },
+  depozit_termen: {
+    label: 'Depozite la termen',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/intrebarile-tale/depozite.html',
+    type: 'product_page',
+  },
+  carduri_de_debit: {
+    label: 'Carduri de debit',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Tranzactionare/carduri-de-debit.html',
+    type: 'product_page',
+  },
+  unicreditcard: {
+    label: 'Carduri de credit UniCreditCard',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Credite/carduri-de-credit.html',
+    type: 'product_page',
+  },
+  card_meniu: {
+    label: 'Card Meniu',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Tranzactionare/carduri-de-debit/card-de-masa.html',
+    type: 'product_page',
+  },
+  overdraft: {
+    label: 'Descoperit de cont',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Credite/descoperit-de-cont.html',
+    type: 'product_page',
+  },
   credit_realizari_personale: {
-    label: 'Aplică Credit Personal',
+    label: 'Credit de realizări personale',
     url: 'https://www.unicredit.ro/credite/credit-de-realizari-personale.html',
     type: 'product_page',
   },
   credit_imobiliar: {
-    label: 'Calculator Credit Imobiliar',
-    url: 'https://www.unicredit.ro/credite/credit-imobiliar.html',
-    type: 'calculator',
-  },
-  depozit_lei: {
-    label: 'Deschide Depozit RON',
-    url: 'https://www.unicredit.ro/economii/depozite.html',
+    label: 'Credit ipotecar',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Credite/credite-ipoteca.html',
     type: 'product_page',
   },
-  depozit_euro: {
-    label: 'Deschide Depozit EUR',
-    url: 'https://www.unicredit.ro/economii/depozite.html',
+  credit_nevoi_personale: {
+    label: 'Credit de nevoi personale',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Credite/Am-gasit-casa.html',
     type: 'product_page',
   },
-  onemarkets_fonduri: {
-    label: 'Explorează Fondurile onemarkets',
-    url: 'https://www.unicredit.ro/investitii/fonduri-de-investitii.html',
+  fonduri_investitii: {
+    label: 'Fonduri de investiții',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Economisire-si-investitii/fonduri-de-investitii.html',
     type: 'product_page',
   },
-  unicreditcard: {
-    label: 'Descoperă UniCreditCard',
-    url: 'https://www.unicredit.ro/carduri/card-de-credit.html',
+  plan_investitii: {
+    label: 'Plan de Investiții (RITM)',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Campanii/campanie-plan-de-investitii.html',
     type: 'product_page',
   },
-  cont_curent_online: {
-    label: 'Deschide Cont Online',
-    url: 'https://www.unicredit.ro/conturi.html',
+  onemarkets_fund: {
+    label: 'Onemarkets Fund',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/Economisire-si-investitii/onemarkets-fund.html',
+    type: 'product_page',
+  },
+  asigurare_viata_ipoteca: {
+    label: 'Asigurare de viață pentru credite ipotecare',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asigurari/asigurare-de-viata-credit-cu-ipoteca.html',
+    type: 'product_page',
+  },
+  asigurare_locuinta: {
+    label: 'Asigurare de locuință',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asigurari/asigurari-de-locuinte.html',
     type: 'product_page',
   },
   genius_protect: {
-    label: 'Genius Protect — Protecție Credit',
-    url: 'https://www.unicredit.ro/asigurari.html',
+    label: 'Genius Protect',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asigurari/genius-protect.html',
+    type: 'product_page',
+  },
+  premium_invest: {
+    label: 'Premium Invest',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asigurari/Start-Premium-Invest.html',
+    type: 'product_page',
+  },
+  umbrella: {
+    label: 'Umbrella',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asigurari/Umbrella.html',
+    type: 'product_page',
+  },
+  mobile_banking: {
+    label: 'Mobile Banking',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asistenta/mobile-banking.html',
+    type: 'product_page',
+  },
+  online_banking: {
+    label: 'Online Banking',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asistenta/online-banking.html',
+    type: 'product_page',
+  },
+  shopsmart: {
+    label: 'ShopSmart',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/digital/ShopSmart.html',
+    type: 'product_page',
+  },
+  apple_pay: {
+    label: 'Apple Pay',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/digital/ApplePay.html',
+    type: 'product_page',
+  },
+  google_pay: {
+    label: 'Google Pay',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/digital/google-pay.html',
+    type: 'product_page',
+  },
+  ropay: {
+    label: 'RoPay',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/digital/ropay.html',
+    type: 'product_page',
+  },
+  click_to_pay: {
+    label: 'Click to Pay',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/digital/click-to-pay.html',
+    type: 'product_page',
+  },
+  fonduri_investitii_companii: {
+    label: 'Fonduri de investiții pentru companii',
+    url: 'https://www.unicredit.ro/ro/imm/economisire-si-investitii/investitii.html',
+    type: 'product_page',
+  },
+  sanaplan: {
+    label: 'SanaPlan',
+    url: 'https://www.unicredit.ro/ro/imm/Asigurari/SanaPlan.html',
+    type: 'product_page',
+  },
+  ucfin: {
+    label: 'UniCredit Consumer Financing',
+    url: 'https://www.ucfin.ro',
+    type: 'product_page',
+  },
+  unicredit_insurance_broker: {
+    label: 'UniCredit Insurance Broker',
+    url: 'mailto:ROUCBInsuranceHO@unicredit.ro',
+    type: 'contact_advisor',
+  },
+  info_center: {
+    label: 'Info Center 24/7',
+    url: 'https://www.unicredit.ro/ro/institutional/diverse/contact.html',
+    type: 'product_page',
+  },
+  sucursale_atm: {
+    label: 'Sucursale și ATM-uri',
+    url: 'https://www.unicredit.ro/ro/institutional/sucursale-atm.html',
+    type: 'product_page',
+  },
+  curs_valutar: {
+    label: 'Curs valutar',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/diverse/curs-valutar.html',
+    type: 'product_page',
+  },
+  asistenta_faq: {
+    label: 'Asistență și întrebări frecvente',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/asistenta.html',
+    type: 'product_page',
+  },
+  documente_utile_pf: {
+    label: 'Documente utile PF',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice/diverse/documente-utile.html',
+    type: 'product_page',
+  },
+  documente_utile_imm: {
+    label: 'Documente utile IMM',
+    url: 'https://www.unicredit.ro/ro/imm/diverse/documente-utile.html',
+    type: 'product_page',
+  },
+  site_principal: {
+    label: 'Pagina principală UniCredit România',
+    url: 'https://www.unicredit.ro',
+    type: 'product_page',
+  },
+  persoane_fizice: {
+    label: 'Persoane fizice',
+    url: 'https://www.unicredit.ro/ro/persoane-fizice.html',
+    type: 'product_page',
+  },
+  imm_companii_micro: {
+    label: 'IMM & Companii Micro',
+    url: 'https://www.unicredit.ro/ro/imm.html',
+    type: 'product_page',
+  },
+  corporate: {
+    label: 'Corporate',
+    url: 'https://www.unicredit.ro/ro/cib.html',
+    type: 'product_page',
+  },
+  institutional: {
+    label: 'Instituțional',
+    url: 'https://www.unicredit.ro/ro/institutional.html',
+    type: 'product_page',
+  },
+  unicredit_leasing: {
+    label: 'UniCredit Leasing',
+    url: 'https://www.unicreditleasing.ro/ro/home.html',
     type: 'product_page',
   },
 }
@@ -144,37 +309,165 @@ EU AI ACT & BANKING COMPLIANCE — MANDATORY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 UNICREDIT_PRODUCTS_LIST (Official Catalog)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. Credit de Realizări Personale
-   Use for: car, vacation, home improvement, education, personal events
-   Key: credit_realizari_personale
-
-2. Credit Imobiliar
-   Use for: buying or renovating property, mortgage financing
-   Key: credit_imobiliar
-
-3. Depozit la Termen (RON)
-   Use for: safe RON savings, emergency fund, capital preservation
-   Key: depozit_lei
-
-4. Depozit la Termen (EUR)
-   Use for: euro savings, currency diversification, eurozone exposure
-   Key: depozit_euro
-
-5. onemarkets Fonduri de Investiții
-   Use for: diversified investment, moderate or growth risk profiles, long-term wealth
-   Key: onemarkets_fonduri
-
-6. UniCreditCard
-   Use for: everyday spending with cashback, loyalty points, travel insurance benefits
-   Key: unicreditcard
-
-7. Cont Curent 100% Online
-   Use for: fully digital banking, no branch visit required, transactional account
+1. Cont curent
+   Use for: operațiuni zilnice, plăți și gestionarea banilor zilnici
    Key: cont_curent_online
 
-8. Genius Protect
-   Use for: life insurance, credit protection, financial safety net
-   Key: genius_protect
+2. Conturi de economii
+   Use for: economii flexibile, dobândă calculată zilnic
+   Key: cont_economii
+
+3. Depozite la termen
+   Use for: economii cu perioadă fixă și dobândă garantată
+   Key: depozit_termen
+
+4. Carduri de debit
+   Use for: acces 24/24 la cont, plăți contactless și beneficii de tranzacționare
+   Key: carduri_de_debit
+
+5. Carduri de credit UniCreditCard
+   Use for: cumpărături cu cashback, program de loialitate și avantaje
+   Key: unicreditcard
+
+6. Card Meniu
+   Use for: carduri de masă pentru angajați
+   Key: card_meniu
+
+7. Descoperit de cont
+   Use for: lichiditate temporară până la 5 salarii nete pe card de debit
+   Key: overdraft
+
+8. Credit ipotecar
+   Use for: achiziție imobiliară, Prima Casă, Casa Verde sau refinanțare
+   Key: credit_imobiliar
+
+9. Credit de nevoi personale
+   Use for: finanțare flexibilă pentru cheltuieli personale
+   Key: credit_nevoi_personale
+
+10. Fonduri de investiții
+    Use for: investiții diversificate locale și internaționale
+    Key: fonduri_investitii
+
+11. Plan de Investiții (RITM)
+    Use for: investiții regulate prin debitare automată
+    Key: plan_investitii
+
+12. Onemarkets Fund
+    Use for: fonduri de investiții cu gestionare profesionistă
+    Key: onemarkets_fund
+
+13. Asigurare de viață pentru credite ipotecare
+    Use for: protecție în caz de deces sau invaliditate
+    Key: asigurare_viata_ipoteca
+
+14. Asigurare de locuință
+    Use for: PAD obligatoriu și asigurare facultativă pentru imobile
+    Key: asigurare_locuinta
+
+15. Genius Protect
+    Use for: asigurare de protecție personală
+    Key: genius_protect
+
+16. Premium Invest
+    Use for: asigurare cu componentă investițională
+    Key: premium_invest
+
+17. Umbrella
+    Use for: asigurare extinsă de acoperire
+    Key: umbrella
+
+18. Mobile Banking
+    Use for: acces la servicii bancare prin smartphone
+    Key: mobile_banking
+
+19. Online Banking
+    Use for: operațiuni bancare online prin web
+    Key: online_banking
+
+20. ShopSmart
+    Use for: program de reduceri la comercianți parteneri
+    Key: shopsmart
+
+21. Apple Pay
+    Use for: plăți mobile Apple
+    Key: apple_pay
+
+22. Google Pay
+    Use for: plăți mobile Google
+    Key: google_pay
+
+23. RoPay
+    Use for: plăți mobile locale
+    Key: ropay
+
+24. Click to Pay
+    Use for: serviciu digital de plată rapidă
+    Key: click_to_pay
+
+25. Fonduri de investiții pentru companii
+    Use for: soluții de investiții business
+    Key: fonduri_investitii_companii
+
+26. SanaPlan
+    Use for: asigurare de sănătate de grup pentru companii
+    Key: sanaplan
+
+27. UniCredit Consumer Financing
+    Use for: credite de consum prin compania specializată
+    Key: ucfin
+
+28. UniCredit Insurance Broker
+    Use for: brokeraj asigurări și intermediere specializată
+    Key: unicredit_insurance_broker
+
+29. Info Center 24/7
+    Use for: asistență telefonică și întrebări frecvente
+    Key: info_center
+
+30. Sucursale și ATM-uri
+    Use for: rețeaua națională de sucursale și ATM-uri
+    Key: sucursale_atm
+
+31. Curs valutar
+    Use for: cursuri valutare actualizate în timp real
+    Key: curs_valutar
+
+32. Asistență și întrebări frecvente
+    Use for: informații suport și FAQ
+    Key: asistenta_faq
+
+33. Documente utile PF
+    Use for: tarife, comisioane și documente pentru persoane fizice
+    Key: documente_utile_pf
+
+34. Documente utile IMM
+    Use for: tarife, comisioane și documente pentru IMM
+    Key: documente_utile_imm
+
+35. Pagina principală UniCredit România
+    Use for: acces rapid la site-ul principal
+    Key: site_principal
+
+36. Persoane fizice
+    Use for: portalul dedicat clienților persoane fizice
+    Key: persoane_fizice
+
+37. IMM & Companii Micro
+    Use for: portalul dedicat IMM-urilor și companiilor micro
+    Key: imm_companii_micro
+
+38. Corporate
+    Use for: portalul UniCredit Corporate
+    Key: corporate
+
+39. Instituțional
+    Use for: informații despre bancă și contact
+    Key: institutional
+
+40. UniCredit Leasing
+    Use for: leasing și finanțări auto
+    Key: unicredit_leasing
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT SCHEMA — STRICT JSON ONLY
