@@ -12,9 +12,9 @@ import { updateStreak } from '@/lib/gamification'
 import { getTopProducts } from '@/lib/matching'
 
 const RISK_LABELS: Record<string, { label: string; color: string; bg: string }> = {
-  conservative: { label: 'Conservator', color: 'text-uc-blue', bg: 'bg-blue-50' },
-  moderate: { label: 'Moderat', color: 'text-uc-amber', bg: 'bg-amber-50' },
-  growth: { label: 'Creștere', color: 'text-uc-green', bg: 'bg-green-50' },
+  conservative: { label: 'STARTER', color: 'text-uc-blue', bg: 'bg-blue-50' },
+  moderate: { label: 'ACTIVE', color: 'text-uc-amber', bg: 'bg-amber-50' },
+  growth: { label: 'OPTIMIZER', color: 'text-uc-green', bg: 'bg-green-50' },
 }
 
 const INCOME_LABELS: Record<string, string> = {

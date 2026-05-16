@@ -20,19 +20,19 @@ const INCOME_LABELS: Record<string, string> = {
 
 const RISK_INFO: Record<string, { label: string; color: string; bg: string; description: string }> = {
   conservative: {
-    label: 'Conservator',
+    label: 'STARTER',
     color: 'text-uc-blue',
     bg: 'bg-blue-50',
     description: 'Preferi siguranța și produse cu risc scăzut',
   },
   moderate: {
-    label: 'Moderat',
+    label: 'ACTIVE',
     color: 'text-uc-amber',
     bg: 'bg-amber-50',
     description: 'Echilibrezi riscul cu potențialul de câștig',
   },
   growth: {
-    label: 'Creștere',
+    label: 'OPTIMIZER',
     color: 'text-uc-green',
     bg: 'bg-green-50',
     description: 'Ești deschis la investiții cu randament mai mare',
