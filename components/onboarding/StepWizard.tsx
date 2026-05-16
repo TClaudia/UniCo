@@ -41,6 +41,7 @@ const variants = {
   exit: (dir: Direction) => ({
     x: dir > 0 ? '-100%' : '100%',
     opacity: 0,
+    pointerEvents: 'none' as const,
   }),
 }
 
@@ -155,8 +156,8 @@ export function StepWizard({ data, onChange, onComplete }: StepWizardProps) {
             animate="center"
             exit="exit"
             transition={{
-              x: { type: 'spring', stiffness: 300, damping: 30 },
-              opacity: { duration: 0.2 },
+              x: { type: 'tween', duration: 0.22, ease: [0.4, 0, 0.2, 1] },
+              opacity: { duration: 0.15 },
             }}
             className="absolute inset-0 overflow-y-auto"
           >

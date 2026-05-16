@@ -13,24 +13,29 @@ interface Step2Props {
   onBack: () => void
 }
 
-function getAgeEmotion(age: number): AvatarEmotion {
-  if (age < 25) return 'enthusiastic'
-  if (age < 40) return 'happy'
-  return 'thinking'
+const AGE_BANDS: { threshold: number; emotion: AvatarEmotion; label: string; range: string }[] = [
+  { threshold: 28,       emotion: 'enthusiastic', label: 'Tânăr',  range: '18–28' },
+  { threshold: 40,       emotion: 'happy',        label: 'Activ',  range: '29–40' },
+  { threshold: 55,       emotion: 'thinking',     label: 'Matur',  range: '41–55' },
+  { threshold: Infinity, emotion: 'informative',  label: 'Senior', range: '56+'   },
+]
+
+function getActiveBand(age: number) {
+  return AGE_BANDS.find(b => age <= b.threshold) ?? AGE_BANDS[AGE_BANDS.length - 1]
 }
 
 function getAgeMessage(age: number): string {
-  if (age < 25) return 'Excelent! Tânăr și cu tot viitorul în față! 🚀'
+  if (age < 25) return 'Tânăr și cu tot viitorul în față! 🚀'
   if (age < 35) return 'Vârsta perfectă pentru a-ți construi averea! 💪'
-  if (age < 45) return 'Experiență și potențial - combinație câștigătoare! 📈'
+  if (age < 45) return 'Experiență și potențial — combinație câștigătoare! 📈'
   if (age < 55) return 'Moment ideal pentru a-ți consolida investițiile! 🏦'
   if (age < 65) return 'Planificare inteligentă pentru o pensie liniștită! 🌅'
   return 'Înțelepciunea financiară vine cu experiența! 🌟'
 }
 
 export function Step2Age({ age, onChange, onNext, onBack }: Step2Props) {
-  const emotion = getAgeEmotion(age)
-  const message = getAgeMessage(age)
+  const activeBand = getActiveBand(age)
+  const message    = getAgeMessage(age)
 
   return (
     <div className="flex flex-col flex-1 px-6 py-8">
@@ -42,23 +47,48 @@ export function Step2Age({ age, onChange, onNext, onBack }: Step2Props) {
         <h2 className="font-display font-bold text-2xl text-uc-black mb-1">
           Câți ani ai?
         </h2>
-        <p className="text-uc-gray-400 text-sm mb-8">
+        <p className="text-uc-gray-400 text-sm mb-6">
           Vârsta ne ajută să personalizăm recomandările tale financiare
         </p>
 
-        {/* Avatar and Age Display */}
-        <div className="flex flex-col items-center gap-4 mb-8">
-          <AvatarEngine emotion={emotion} size="md" />
+        {/* 4 avatar faces row */}
+        <div className="flex justify-between items-end mb-5 px-1">
+          {AGE_BANDS.map(band => {
+            const isActive = band.range === activeBand.range
+            return (
+              <motion.div
+                key={band.range}
+                animate={{
+                  scale:   isActive ? 1    : 0.72,
+                  opacity: isActive ? 1    : 0.32,
+                }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="flex flex-col items-center gap-1"
+              >
+                <AvatarEngine emotion={band.emotion} size={isActive ? 'md' : 'sm'} />
+                <span
+                  className="text-xs font-bold leading-tight"
+                  style={{ color: isActive ? '#E2001A' : '#9B9A96' }}
+                >
+                  {band.label}
+                </span>
+                <span className="text-xs leading-none" style={{ color: '#B0AEA8' }}>
+                  {band.range}
+                </span>
+              </motion.div>
+            )
+          })}
+        </div>
 
+        {/* Age number + message */}
+        <div className="flex flex-col items-center gap-3 mb-6">
           <motion.div
             key={age}
             initial={{ scale: 1.1, opacity: 0.7 }}
-            animate={{ scale: 1, opacity: 1 }}
+            animate={{ scale: 1,   opacity: 1   }}
             className="text-center"
           >
-            <div className="text-6xl font-display font-bold text-uc-red">
-              {age}
-            </div>
+            <div className="text-6xl font-display font-bold text-uc-red">{age}</div>
             <div className="text-uc-gray-400 text-sm font-medium">ani</div>
           </motion.div>
 
@@ -80,37 +110,9 @@ export function Step2Age({ age, onChange, onNext, onBack }: Step2Props) {
             value={age}
             onChange={onChange}
             showTicks
-            tickValues={[18, 25, 35, 45, 55, 65, 80]}
-            tickLabels={['18', '25', '35', '45', '55', '65', '80']}
+            tickValues={[18, 28, 40, 55, 80]}
+            tickLabels={['18', '28', '40', '55', '80']}
           />
-        </div>
-
-        {/* Age categories */}
-        <div className="mt-6 grid grid-cols-3 gap-2">
-          {[
-            { range: '18-30', label: 'Tânăr', emoji: '🎓' },
-            { range: '31-50', label: 'Activ', emoji: '💼' },
-            { range: '51+', label: 'Senior', emoji: '🏆' },
-          ].map((cat) => {
-            const [min, max] = cat.range.split('-').map(v => parseInt(v.replace('+', '')))
-            const isActive = max
-              ? age >= min && age <= max
-              : age >= min
-            return (
-              <div
-                key={cat.range}
-                className={`text-center p-2 rounded-btn transition-colors ${
-                  isActive ? 'bg-red-50 border border-uc-red' : 'bg-white border border-uc-gray-100'
-                }`}
-              >
-                <div className="text-lg">{cat.emoji}</div>
-                <div className={`text-xs font-semibold ${isActive ? 'text-uc-red' : 'text-uc-gray-700'}`}>
-                  {cat.label}
-                </div>
-                <div className="text-xs text-uc-gray-400">{cat.range}</div>
-              </div>
-            )
-          })}
         </div>
       </motion.div>
 
