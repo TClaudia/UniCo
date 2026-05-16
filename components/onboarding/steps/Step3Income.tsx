@@ -3,7 +3,8 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { IncomeBracket } from '@/types'
-import { AvatarCharacter, DEFAULT_AVATAR_CONFIG, CharacterEmotion } from '@/components/avatar/AvatarCharacter'
+import { AvatarEngine } from '@/components/avatar/AvatarEngine'
+import { AvatarEmotion } from '@/types'
 
 interface Step3Props {
   income: IncomeBracket
@@ -56,12 +57,12 @@ const INCOME_OPTIONS: {
   },
 ]
 
-function getIncomeEmotion(income: IncomeBracket): CharacterEmotion {
-  if (!income) return 'listening'
-  if (income === 'under_3000') return 'empathetic'
+function getIncomeEmotion(income: IncomeBracket): AvatarEmotion {
+  if (!income) return 'happy'
+  if (income === 'under_3000') return 'concerned'
   if (income === '3000_5000') return 'thinking'
   if (income === '5000_8000') return 'happy'
-  return 'idea'
+  return 'enthusiastic'
 }
 
 export function Step3Income({ income, onChange, onNext, onBack }: Step3Props) {
@@ -75,7 +76,7 @@ export function Step3Income({ income, onChange, onNext, onBack }: Step3Props) {
         className="flex-1"
       >
         <div className="flex flex-col items-center mb-4">
-          <AvatarCharacter config={DEFAULT_AVATAR_CONFIG} emotion={emotion} size="sm" />
+          <AvatarEngine emotion={emotion} size="sm" />
         </div>
         <h2 className="font-display font-bold text-2xl text-uc-black mb-1">
           Care este venitul tău lunar?

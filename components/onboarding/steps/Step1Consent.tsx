@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { OnboardingData } from '@/app/onboarding/page'
-import { AvatarCharacter, DEFAULT_AVATAR_CONFIG } from '@/components/avatar/AvatarCharacter'
+import { AvatarEngine } from '@/components/avatar/AvatarEngine'
 
 type ConsentData = OnboardingData['consent']
 
@@ -36,7 +36,7 @@ export function Step1Consent({ consent, onChange, onNext, onBack }: Step1Props) 
         className="flex-1"
       >
         <div className="flex flex-col items-center mb-6 gap-3">
-          <AvatarCharacter config={DEFAULT_AVATAR_CONFIG} emotion="listening" size="sm" />
+          <AvatarEngine emotion="happy" size="sm" />
           <div className="text-center">
             <h2 className="font-display font-bold text-xl text-uc-black">Protecția Datelor</h2>
             <p className="text-sm text-uc-gray-400">Citește și acceptă înainte de a continua</p>

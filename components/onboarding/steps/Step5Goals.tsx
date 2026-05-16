@@ -3,7 +3,8 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { FinancialGoal } from '@/types'
-import { AvatarCharacter, DEFAULT_AVATAR_CONFIG, CharacterEmotion } from '@/components/avatar/AvatarCharacter'
+import { AvatarEngine } from '@/components/avatar/AvatarEngine'
+import { AvatarEmotion } from '@/types'
 
 interface Step5Props {
   goals: FinancialGoal[]
@@ -77,10 +78,10 @@ const GOALS: {
   },
 ]
 
-function getGoalsEmotion(count: number): CharacterEmotion {
-  if (count === 0) return 'listening'
+function getGoalsEmotion(count: number): AvatarEmotion {
+  if (count === 0) return 'happy'
   if (count <= 2) return 'happy'
-  return 'idea'
+  return 'enthusiastic'
 }
 
 export function Step5Goals({ goals, onChange, onNext, onBack }: Step5Props) {
@@ -103,7 +104,7 @@ export function Step5Goals({ goals, onChange, onNext, onBack }: Step5Props) {
         className="flex-1"
       >
         <div className="flex flex-col items-center mb-4">
-          <AvatarCharacter config={DEFAULT_AVATAR_CONFIG} emotion={avatarEmotion} size="sm" />
+          <AvatarEngine emotion={avatarEmotion} size="sm" />
         </div>
         <h2 className="font-display font-bold text-2xl text-uc-black mb-1">
           Ce obiective financiare ai?

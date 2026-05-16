@@ -3,7 +3,8 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Slider } from '@/components/ui/Slider'
-import { AvatarCharacter, DEFAULT_AVATAR_CONFIG, CharacterEmotion } from '@/components/avatar/AvatarCharacter'
+import { AvatarEngine } from '@/components/avatar/AvatarEngine'
+import { AvatarEmotion } from '@/types'
 
 interface Step2Props {
   age: number
@@ -12,10 +13,9 @@ interface Step2Props {
   onBack: () => void
 }
 
-function getAgeEmotion(age: number): CharacterEmotion {
-  if (age < 25) return 'idea'
+function getAgeEmotion(age: number): AvatarEmotion {
+  if (age < 25) return 'enthusiastic'
   if (age < 40) return 'happy'
-  if (age < 55) return 'thinking'
   return 'thinking'
 }
 
@@ -48,7 +48,7 @@ export function Step2Age({ age, onChange, onNext, onBack }: Step2Props) {
 
         {/* Avatar and Age Display */}
         <div className="flex flex-col items-center gap-4 mb-8">
-          <AvatarCharacter config={DEFAULT_AVATAR_CONFIG} emotion={emotion} size="md" />
+          <AvatarEngine emotion={emotion} size="md" />
 
           <motion.div
             key={age}

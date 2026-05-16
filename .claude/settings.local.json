@@ -5,7 +5,9 @@
       "Bash(npx tsc *)",
       "Bash(npx next *)",
       "Bash(Select-String -Path \"components\\\\avatar\\\\AvatarCharacter.tsx\" -Pattern \"function HairLayer|function AvatarSVG|_unused_\")",
-      "Bash(Select-Object LineNumber, Line)"
+      "Bash(Select-Object LineNumber, Line)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\NICO-DELL\\\\Downloads\\\\unic\\\\UniCo\" -Directory -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty Name)"
     ]
   }
 }

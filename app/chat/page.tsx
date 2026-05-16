@@ -3,18 +3,18 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  AvatarCharacter, AvatarEditor, EMOTIONS,
-} from '@/components/avatar/AvatarCharacter'
-import type { AvatarConfig, CharacterEmotion } from '@/components/avatar/AvatarCharacter'
+import { AvatarEngine, AvatarStyle, AVATAR_EMOTION_META } from '@/components/avatar/AvatarEngine'
 import { useChat } from '@/hooks/useChat'
 import { getProfile } from '@/lib/storage'
 import { getConversations, deleteConversation, StoredConversation } from '@/lib/storage'
+import type { AvatarEmotion } from '@/types'
 
-const DEFAULT_CONFIG: AvatarConfig = {
-  skinTone: 'medium', hairStyle: 'medium', hairColor: 'black',
-  eyeColor: 'brown', outfit: 'suit', accessory: 'glasses', name: 'Alex',
+interface ChatAvatarStyle {
+  name: string
+  primaryColor?: string
 }
+
+const DEFAULT_STYLE: ChatAvatarStyle = { name: 'Alex' }
 
 const QUICK_ACTIONS = [
   'Vreau să economisesc',
@@ -22,6 +22,17 @@ const QUICK_ACTIONS = [
   'Credit imobiliar',
   'Fond de urgență',
   'Transfer rapid',
+]
+
+const PALETTE: { name: string; value: string | undefined }[] = [
+  { name: 'Auto (după stare)', value: undefined },
+  { name: 'Roșu UniCredit',   value: '#E2001A' },
+  { name: 'Albastru',         value: '#0066CC' },
+  { name: 'Verde',            value: '#00A862' },
+  { name: 'Amber',            value: '#F5A623' },
+  { name: 'Navy',             value: '#1A2535' },
+  { name: 'Violet',           value: '#7B2D8B' },
+  { name: 'Roz',              value: '#D63384' },
 ]
 
 function formatTime(iso?: string): string {
@@ -43,34 +54,28 @@ export default function ChatPage() {
   const [mounted,          setMounted]          = useState(false)
   const [showHistory,      setShowHistory]      = useState(false)
   const [showAvatarEditor, setShowAvatarEditor] = useState(false)
-  const [avatarConfig,     setAvatarConfig]     = useState<AvatarConfig>(DEFAULT_CONFIG)
+  const [avatarStyle,      setAvatarStyle]      = useState<ChatAvatarStyle>(DEFAULT_STYLE)
   const [input,            setInput]            = useState('')
   const [conversations,    setConversations]    = useState<StoredConversation[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef       = useRef<HTMLInputElement>(null)
 
   const { messages, emotion, isLoading, currentConversationId, sendMessage, clearMessages, loadConversation } = useChat()
-  const emotionMeta = EMOTIONS[emotion] ?? EMOTIONS.idle
+  const emotionMeta = AVATAR_EMOTION_META[emotion as AvatarEmotion] ?? AVATAR_EMOTION_META.happy
 
-  // Refresh conversation list from localStorage
-  const refreshHistory = useCallback(() => {
-    setConversations(getConversations())
-  }, [])
+  const refreshHistory = useCallback(() => setConversations(getConversations()), [])
 
   useEffect(() => {
     setMounted(true)
     if (!getProfile()) { router.push('/onboarding'); return }
     try {
-      const s = localStorage.getItem('uc_avatar_config')
-      if (s) setAvatarConfig(JSON.parse(s))
+      const s = localStorage.getItem('uc_avatar_style')
+      if (s) setAvatarStyle(JSON.parse(s))
     } catch {}
     refreshHistory()
   }, [router, refreshHistory])
 
-  // Re-read history whenever a conversation is persisted
-  useEffect(() => {
-    refreshHistory()
-  }, [messages, refreshHistory])
+  useEffect(() => { refreshHistory() }, [messages, refreshHistory])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -88,13 +93,13 @@ export default function ChatPage() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }, [handleSend])
 
-  const updateConfig = (key: keyof AvatarConfig, value: string) => {
-    setAvatarConfig(prev => {
+  const updateStyle = useCallback(<K extends keyof ChatAvatarStyle>(key: K, value: ChatAvatarStyle[K]) => {
+    setAvatarStyle(prev => {
       const next = { ...prev, [key]: value }
-      try { localStorage.setItem('uc_avatar_config', JSON.stringify(next)) } catch {}
+      try { localStorage.setItem('uc_avatar_style', JSON.stringify(next)) } catch {}
       return next
     })
-  }
+  }, [])
 
   const handleNewChat = useCallback(() => {
     clearMessages()
@@ -115,6 +120,11 @@ export default function ChatPage() {
     refreshHistory()
     if (currentConversationId === id) clearMessages()
   }, [currentConversationId, clearMessages, refreshHistory])
+
+  const engineStyle: AvatarStyle = {
+    primaryColor: avatarStyle.primaryColor,
+    name: avatarStyle.name,
+  }
 
   if (!mounted) return null
 
@@ -143,7 +153,6 @@ export default function ChatPage() {
           overflow:hidden;
         }
 
-        /* ── Left: chat panel ── */
         .chat-left {
           flex:1 1 0; display:flex; flex-direction:column;
           background:#FAFAF8; border-right:1px solid rgba(0,0,0,0.06);
@@ -151,9 +160,8 @@ export default function ChatPage() {
           box-shadow: 2px 0 24px rgba(0,0,0,0.04);
         }
 
-        /* ── Right: avatar panel (desktop) ── */
         .avatar-panel {
-          width:clamp(280px,30%,340px); flex-shrink:0;
+          width:clamp(260px,28%,320px); flex-shrink:0;
           display:flex; flex-direction:column;
           background:linear-gradient(160deg,#0F1923 0%,#1A2535 45%,#0D2137 100%);
           position:relative; overflow:hidden;
@@ -171,7 +179,6 @@ export default function ChatPage() {
           pointer-events:none;
         }
 
-        /* Mobile avatar bar */
         .mobile-avatar-bar { display:none }
 
         @media(max-width:720px) {
@@ -189,12 +196,10 @@ export default function ChatPage() {
 
       <div className="chat-root">
 
-        {/* ══════════════════════════════════════════
-            LEFT PANEL — Chat
-        ══════════════════════════════════════════ */}
+        {/* ══ LEFT PANEL — Chat ══ */}
         <div className="chat-left">
 
-          {/* ── Top header ── */}
+          {/* Top header */}
           <div style={{
             padding:'0 14px', height:60,
             borderBottom:'1px solid rgba(0,0,0,0.06)',
@@ -228,20 +233,26 @@ export default function ChatPage() {
               </div>
             </div>
 
-            {/* Emotion chip */}
-            <div style={{
-              display:'flex', alignItems:'center', gap:5,
-              padding:'4px 10px', borderRadius:20, flexShrink:0,
-              background:`${emotionMeta.color}12`,
-              border:`1px solid ${emotionMeta.color}28`,
-              transition:'all 0.3s',
-            }}>
-              <span style={{
-                width:6, height:6, borderRadius:'50%', background:emotionMeta.color,
-                display:'inline-block', animation:'pulseGlow 2s infinite',
-              }}/>
-              <span style={{ fontSize:10, fontWeight:600, color:emotionMeta.color }}>{emotionMeta.label}</span>
-            </div>
+            {/* Active emotion chip */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={emotion}
+                initial={{ opacity:0, scale:0.9 }}
+                animate={{ opacity:1, scale:1 }}
+                exit={{ opacity:0, scale:0.9 }}
+                style={{
+                  display:'flex', alignItems:'center', gap:5,
+                  padding:'4px 10px', borderRadius:20, flexShrink:0,
+                  background:`${emotionMeta.color}12`,
+                  border:`1px solid ${emotionMeta.color}28`,
+                }}>
+                <span style={{
+                  width:6, height:6, borderRadius:'50%', background:emotionMeta.color,
+                  display:'inline-block', animation:'pulseGlow 2s infinite',
+                }}/>
+                <span style={{ fontSize:10, fontWeight:600, color:emotionMeta.color }}>{emotionMeta.label}</span>
+              </motion.div>
+            </AnimatePresence>
 
             <IconBtn onClick={handleNewChat} label="Conversație nouă" hoverColor="#E30613">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -251,21 +262,26 @@ export default function ChatPage() {
             </IconBtn>
           </div>
 
-          {/* ── Mobile avatar banner ── */}
+          {/* Mobile avatar banner */}
           <div className="mobile-avatar-bar">
-            <AvatarCharacter config={avatarConfig} emotion={emotion} size="sm" />
+            <AvatarEngine emotion={emotion as AvatarEmotion} size="sm" avatarStyle={engineStyle} />
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:14, fontWeight:700, color:'#FFF' }}>{avatarConfig.name}</div>
+              <div style={{ fontSize:14, fontWeight:700, color:'#FFF' }}>{avatarStyle.name}</div>
               <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)', marginTop:2 }}>AI Financial Advisor</div>
-              <div style={{
-                display:'inline-flex', alignItems:'center', gap:4, marginTop:5,
-                padding:'2px 8px', borderRadius:20,
-                background:`${emotionMeta.color}25`,
-                border:`1px solid ${emotionMeta.color}45`,
-              }}>
-                <span style={{ width:5, height:5, borderRadius:'50%', background:emotionMeta.color, display:'inline-block' }}/>
-                <span style={{ fontSize:10, color:emotionMeta.color, fontWeight:500 }}>{emotionMeta.label}</span>
-              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={emotion}
+                  initial={{ opacity:0 }} animate={{ opacity:1 }}
+                  style={{
+                    display:'inline-flex', alignItems:'center', gap:4, marginTop:5,
+                    padding:'2px 8px', borderRadius:20,
+                    background:`${emotionMeta.color}25`,
+                    border:`1px solid ${emotionMeta.color}45`,
+                  }}>
+                  <span style={{ width:5, height:5, borderRadius:'50%', background:emotionMeta.color, display:'inline-block' }}/>
+                  <span style={{ fontSize:10, color:emotionMeta.color, fontWeight:500 }}>{emotionMeta.label}</span>
+                </motion.div>
+              </AnimatePresence>
             </div>
             <button
               onClick={() => setShowAvatarEditor(s => !s)}
@@ -289,18 +305,22 @@ export default function ChatPage() {
                 exit={{ height:0, opacity:0 }}
                 style={{ background:'linear-gradient(165deg,#0F1923,#0D2137)', overflow:'hidden', flexShrink:0 }}
               >
-                <div style={{ maxHeight:340, overflowY:'auto' }}>
-                  <AvatarEditor config={avatarConfig} onChange={updateConfig} onClose={() => setShowAvatarEditor(false)} />
+                <div style={{ maxHeight:300, overflowY:'auto' }}>
+                  <AvatarEngineEditor
+                    avatarStyle={avatarStyle}
+                    onChangeName={n => updateStyle('name', n)}
+                    onChangeColor={c => updateStyle('primaryColor', c)}
+                    onClose={() => setShowAvatarEditor(false)}
+                  />
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* ── History drawer ── */}
+          {/* History drawer */}
           <AnimatePresence>
             {showHistory && (
               <>
-                {/* Backdrop */}
                 <motion.div
                   initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
                   onClick={() => setShowHistory(false)}
@@ -353,24 +373,22 @@ export default function ChatPage() {
                         <div style={{ fontSize:24, marginBottom:8 }}>💬</div>
                         Nicio conversație salvată încă.<br />Trimite primul mesaj!
                       </div>
-                    ) : (
-                      conversations.map(conv => (
-                        <HistoryItem
-                          key={conv.id}
-                          conv={conv}
-                          isActive={conv.id === currentConversationId}
-                          onClick={() => handleLoadConversation(conv)}
-                          onDelete={(e) => handleDeleteConversation(conv.id, e)}
-                        />
-                      ))
-                    )}
+                    ) : conversations.map(conv => (
+                      <HistoryItem
+                        key={conv.id}
+                        conv={conv}
+                        isActive={conv.id === currentConversationId}
+                        onClick={() => handleLoadConversation(conv)}
+                        onDelete={(e) => handleDeleteConversation(conv.id, e)}
+                      />
+                    ))}
                   </div>
                 </motion.div>
               </>
             )}
           </AnimatePresence>
 
-          {/* ── Disclaimer ── */}
+          {/* Disclaimer */}
           <div style={{
             padding:'5px 16px',
             background:'rgba(245,158,11,0.07)',
@@ -382,7 +400,7 @@ export default function ChatPage() {
             </p>
           </div>
 
-          {/* ── Messages ── */}
+          {/* Messages */}
           <div style={{
             flex:1, overflowY:'auto', padding:'20px 20px 8px',
             display:'flex', flexDirection:'column', gap:16,
@@ -403,7 +421,8 @@ export default function ChatPage() {
                   exit={{ opacity:0 }} transition={{ duration:0.2, ease:'easeOut' }}>
                   <MsgBubble
                     msg={msg}
-                    initial={avatarConfig.name[0] ?? 'A'}
+                    avatarStyle={engineStyle}
+                    emotion={emotion as AvatarEmotion}
                     showAvatar={msg.role === 'assistant' && (idx === 0 || messages[idx-1]?.role !== 'assistant')}
                   />
                 </motion.div>
@@ -416,7 +435,7 @@ export default function ChatPage() {
                   initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
                   exit={{ opacity:0 }}
                   style={{ display:'flex', alignItems:'flex-end', gap:10 }}>
-                  <AvatarThumb initial={avatarConfig.name[0] ?? 'A'} />
+                  <AvatarEngine emotion="thinking" size="xs" avatarStyle={{ primaryColor: avatarStyle.primaryColor }} />
                   <div style={{
                     padding:'12px 16px', borderRadius:'18px 18px 18px 4px',
                     background:'#F0EFED',
@@ -437,7 +456,7 @@ export default function ChatPage() {
             <div ref={messagesEndRef}/>
           </div>
 
-          {/* ── Quick actions ── */}
+          {/* Quick actions */}
           <div style={{
             padding:'8px 20px 0',
             display:'flex', gap:7,
@@ -452,7 +471,7 @@ export default function ChatPage() {
             ))}
           </div>
 
-          {/* ── Input bar ── */}
+          {/* Input bar */}
           <div style={{ padding:'10px 20px 16px', flexShrink:0 }}>
             <InputBar
               inputRef={inputRef}
@@ -465,9 +484,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════
-            RIGHT PANEL — Avatar (desktop only)
-        ══════════════════════════════════════════ */}
+        {/* ══ RIGHT PANEL — Avatar (desktop only) ══ */}
         <div className="avatar-panel">
 
           {/* Panel header */}
@@ -479,10 +496,8 @@ export default function ChatPage() {
           }}>
             <div>
               <div style={{ fontSize:14, fontWeight:700, color:'#FFF', letterSpacing:'-0.2px' }}>
-                {avatarConfig.name}
-                <span style={{ fontSize:11, fontWeight:400, color:'rgba(255,255,255,0.4)', marginLeft:7 }}>
-                  AI Coach
-                </span>
+                {avatarStyle.name}
+                <span style={{ fontSize:11, fontWeight:400, color:'rgba(255,255,255,0.4)', marginLeft:7 }}>AI Coach</span>
               </div>
               <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginTop:2, letterSpacing:'0.03em' }}>
                 UniCredit Bank România
@@ -490,7 +505,7 @@ export default function ChatPage() {
             </div>
             <button
               onClick={() => setShowAvatarEditor(s => !s)}
-              title="Editează avatarul"
+              title="Personalizează avatarul"
               style={{
                 width:34, height:34, borderRadius:9, cursor:'pointer',
                 background: showAvatarEditor ? '#E30613' : 'rgba(255,255,255,0.08)',
@@ -504,92 +519,102 @@ export default function ChatPage() {
             </button>
           </div>
 
-          {/* Avatar display / editor */}
-          {!showAvatarEditor ? (
-            <div style={{
-              flex:1, display:'flex', flexDirection:'column',
-              alignItems:'center', justifyContent:'center',
-              padding:'0 24px 32px', position:'relative', zIndex:1,
-              gap:0,
-            }}>
-              {/* Avatar with subtle platform */}
-              <div style={{ position:'relative', marginBottom:4 }}>
-                <div style={{
-                  position:'absolute', bottom:-16, left:'50%', transform:'translateX(-50%)',
-                  width:120, height:18, borderRadius:'50%',
-                  background:'rgba(0,0,0,0.25)', filter:'blur(8px)',
-                }}/>
-                <AvatarCharacter config={avatarConfig} emotion={emotion} size="lg"/>
-              </div>
-
-              {/* Emotion badge */}
-              <div style={{
-                marginTop:20, padding:'6px 16px', borderRadius:24,
-                background:`${emotionMeta.color}18`,
-                border:`1px solid ${emotionMeta.color}35`,
-                display:'flex', alignItems:'center', gap:7,
-                backdropFilter:'blur(4px)',
-              }}>
-                <span style={{
-                  width:7, height:7, borderRadius:'50%', display:'inline-block',
-                  background:emotionMeta.color, boxShadow:`0 0 8px ${emotionMeta.color}`,
-                  animation:'pulseGlow 2s infinite',
-                }}/>
-                <span style={{ fontSize:12, fontWeight:600, color:emotionMeta.color, letterSpacing:'0.03em' }}>
-                  {emotionMeta.label}
-                </span>
-              </div>
-
-              {/* Divider */}
-              <div style={{ width:'100%', height:1, background:'rgba(255,255,255,0.06)', margin:'18px 0 14px' }}/>
-
-              {/* Stats row */}
-              <div style={{ display:'flex', gap:8, width:'100%' }}>
-                {[
-                  { label:'Mesaje', value: messages.filter(m=>m.id!=='welcome').length },
-                  { label:'Conversații', value: conversations.length },
-                ].map(s => (
-                  <div key={s.label} style={{
-                    flex:1, padding:'10px 8px', borderRadius:10,
-                    background:'rgba(255,255,255,0.05)',
-                    border:'1px solid rgba(255,255,255,0.08)',
-                    textAlign:'center',
-                  }}>
-                    <div style={{ fontSize:18, fontWeight:700, color:'#FFF' }}>{s.value}</div>
-                    <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', marginTop:2 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Emotion quick-set */}
-              <div style={{ marginTop:14, width:'100%' }}>
-                <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginBottom:7, textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600 }}>
-                  Stare
+          {/* Avatar display or editor */}
+          <AnimatePresence mode="wait">
+            {!showAvatarEditor ? (
+              <motion.div
+                key="avatar-display"
+                initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                style={{
+                  flex:1, display:'flex', flexDirection:'column',
+                  alignItems:'center', justifyContent:'center',
+                  padding:'0 24px 32px', position:'relative', zIndex:1,
+                }}
+              >
+                {/* Avatar with subtle drop shadow */}
+                <div style={{ position:'relative', marginBottom:4 }}>
+                  <div style={{
+                    position:'absolute', bottom:-20, left:'50%', transform:'translateX(-50%)',
+                    width:100, height:16, borderRadius:'50%',
+                    background:'rgba(0,0,0,0.3)', filter:'blur(10px)',
+                  }}/>
+                  <AvatarEngine
+                    emotion={emotion as AvatarEmotion}
+                    size="xl"
+                    avatarStyle={engineStyle}
+                  />
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:5 }}>
-                  {(Object.entries(EMOTIONS) as [CharacterEmotion, { label:string; color:string }][]).map(([k, v]) => (
-                    <div key={k} title={v.label}
-                      style={{
-                        padding:'6px 2px', borderRadius:7, fontSize:9, fontWeight:600,
-                        textAlign:'center',
-                        border:`1px solid ${emotion === k ? v.color : 'rgba(255,255,255,0.08)'}`,
-                        background: emotion === k ? `${v.color}20` : 'rgba(255,255,255,0.03)',
-                        color: emotion === k ? v.color : 'rgba(255,255,255,0.35)',
-                        transition:'all 0.2s',
-                        letterSpacing:'0.02em',
-                      }}>
-                      {v.label}
+
+                {/* Active emotion badge – only current state, no grid */}
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={emotion}
+                    initial={{ opacity:0, y:6, scale:0.95 }}
+                    animate={{ opacity:1, y:0,  scale:1    }}
+                    exit={{ opacity:0, y:-6, scale:0.95 }}
+                    transition={{ duration:0.25 }}
+                    style={{
+                      marginTop:22, padding:'7px 20px', borderRadius:24,
+                      background:`${emotionMeta.color}18`,
+                      border:`1px solid ${emotionMeta.color}38`,
+                      display:'flex', alignItems:'center', gap:8,
+                      backdropFilter:'blur(4px)',
+                    }}>
+                    <span style={{
+                      width:8, height:8, borderRadius:'50%', display:'inline-block',
+                      background:emotionMeta.color, boxShadow:`0 0 8px ${emotionMeta.color}`,
+                      animation:'pulseGlow 2s infinite',
+                    }}/>
+                    <span style={{ fontSize:13, fontWeight:600, color:emotionMeta.color, letterSpacing:'0.03em' }}>
+                      {emotionMeta.label}
+                    </span>
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Divider */}
+                <div style={{ width:'100%', height:1, background:'rgba(255,255,255,0.06)', margin:'20px 0 14px' }}/>
+
+                {/* Stats */}
+                <div style={{ display:'flex', gap:8, width:'100%' }}>
+                  {[
+                    { label:'Mesaje',      value: messages.filter(m=>m.id!=='welcome').length },
+                    { label:'Conversații', value: conversations.length },
+                  ].map(s => (
+                    <div key={s.label} style={{
+                      flex:1, padding:'10px 8px', borderRadius:10,
+                      background:'rgba(255,255,255,0.05)',
+                      border:'1px solid rgba(255,255,255,0.08)',
+                      textAlign:'center',
+                    }}>
+                      <div style={{ fontSize:18, fontWeight:700, color:'#FFF' }}>{s.value}</div>
+                      <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', marginTop:2 }}>{s.label}</div>
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div style={{ flex:1, overflowY:'auto', position:'relative', zIndex:1 }}>
-              <AvatarEditor config={avatarConfig} onChange={updateConfig}
-                onClose={() => setShowAvatarEditor(false)} />
-            </div>
-          )}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="avatar-editor"
+                initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                style={{ flex:1, overflowY:'auto', position:'relative', zIndex:1 }}
+              >
+                {/* Live preview while editing */}
+                <div style={{ display:'flex', justifyContent:'center', padding:'20px 0 8px' }}>
+                  <AvatarEngine
+                    emotion={emotion as AvatarEmotion}
+                    size="lg"
+                    avatarStyle={engineStyle}
+                  />
+                </div>
+                <AvatarEngineEditor
+                  avatarStyle={avatarStyle}
+                  onChangeName={n => updateStyle('name', n)}
+                  onChangeColor={c => updateStyle('primaryColor', c)}
+                  onClose={() => setShowAvatarEditor(false)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
       </div>
@@ -598,6 +623,93 @@ export default function ChatPage() {
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
+
+function AvatarEngineEditor({
+  avatarStyle,
+  onChangeName,
+  onChangeColor,
+  onClose,
+}: {
+  avatarStyle: ChatAvatarStyle
+  onChangeName: (name: string) => void
+  onChangeColor: (color: string | undefined) => void
+  onClose: () => void
+}) {
+  return (
+    <div style={{ padding:'8px 20px 24px' }}>
+      <div style={{
+        display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16,
+        paddingTop:4,
+      }}>
+        <span style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', letterSpacing:'0.08em', textTransform:'uppercase' }}>
+          Personalizare
+        </span>
+        <button onClick={onClose} style={{
+          background:'none', border:'none', cursor:'pointer',
+          color:'rgba(255,255,255,0.4)', fontSize:16, lineHeight:1,
+          padding:'2px 4px', borderRadius:4,
+        }}>✕</button>
+      </div>
+
+      {/* Name */}
+      <label style={{ fontSize:11, color:'rgba(255,255,255,0.45)', display:'block', marginBottom:6, letterSpacing:'0.06em', textTransform:'uppercase', fontWeight:600 }}>
+        Nume
+      </label>
+      <input
+        type="text"
+        value={avatarStyle.name}
+        onChange={e => onChangeName(e.target.value)}
+        maxLength={20}
+        style={{
+          width:'100%', padding:'9px 12px', marginBottom:18,
+          background:'rgba(255,255,255,0.07)',
+          border:'1px solid rgba(255,255,255,0.12)',
+          borderRadius:9, color:'#FFF', fontSize:13,
+          outline:'none', fontFamily:'inherit',
+          transition:'border-color 0.2s',
+        }}
+        onFocus={e => (e.target.style.borderColor = 'rgba(255,255,255,0.3)')}
+        onBlur={e  => (e.target.style.borderColor = 'rgba(255,255,255,0.12)')}
+      />
+
+      {/* Colour palette */}
+      <label style={{ fontSize:11, color:'rgba(255,255,255,0.45)', display:'block', marginBottom:10, letterSpacing:'0.06em', textTransform:'uppercase', fontWeight:600 }}>
+        Culoare față
+      </label>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
+        {PALETTE.map(p => {
+          const isSelected = p.value === avatarStyle.primaryColor
+          return (
+            <button
+              key={p.name}
+              onClick={() => onChangeColor(p.value)}
+              title={p.name}
+              style={{
+                width:34, height:34, borderRadius:'50%', cursor:'pointer',
+                background: p.value
+                  ? p.value
+                  : 'conic-gradient(#E2001A 0%, #0066CC 33%, #00A862 66%, #E2001A 100%)',
+                border: isSelected
+                  ? '3px solid #FFF'
+                  : '2px solid rgba(255,255,255,0.18)',
+                transform: isSelected ? 'scale(1.2)' : 'scale(1)',
+                transition:'all 0.15s',
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}
+            >
+              {!p.value && (
+                <span style={{ fontSize:11, lineHeight:1 }}>✨</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+      <p style={{ fontSize:10, color:'rgba(255,255,255,0.25)', marginTop:8, marginBottom:0 }}>
+        ✨ Auto folosește culoarea stării emoționale curente
+      </p>
+    </div>
+  )
+}
 
 function HistoryItem({
   conv, isActive, onClick, onDelete,
@@ -686,20 +798,6 @@ function IconBtn({
     >
       {children}
     </button>
-  )
-}
-
-function AvatarThumb({ initial }: { initial: string }) {
-  return (
-    <div style={{
-      width:30, height:30, borderRadius:'50%',
-      background:'linear-gradient(135deg,#E30613,#B5001A)',
-      display:'flex', alignItems:'center', justifyContent:'center',
-      flexShrink:0, fontSize:12, fontWeight:700, color:'#FFF',
-      boxShadow:'0 2px 8px rgba(227,6,19,0.3)',
-    }}>
-      {initial}
-    </div>
   )
 }
 
@@ -815,22 +913,27 @@ type MsgType = {
   timestamp?: string;
 }
 
-function MsgBubble({ msg, initial, showAvatar }: { msg: MsgType; initial: string; showAvatar: boolean }) {
+function MsgBubble({
+  msg, avatarStyle, emotion, showAvatar,
+}: {
+  msg: MsgType
+  avatarStyle: AvatarStyle
+  emotion: AvatarEmotion
+  showAvatar: boolean
+}) {
   const isUser = msg.role === 'user'
-  const time = formatTime()
 
   return (
     <div style={{ display:'flex', flexDirection: isUser ? 'row-reverse' : 'row', alignItems:'flex-end', gap:10 }}>
       {!isUser && (
         showAvatar
-          ? <AvatarThumb initial={initial}/>
-          : <div style={{ width:30, flexShrink:0 }}/>
+          ? <AvatarEngine emotion={emotion} size="xs" avatarStyle={{ primaryColor: avatarStyle.primaryColor }} />
+          : <div style={{ width:32, flexShrink:0 }}/>
       )}
       <div style={{
         maxWidth:'72%', display:'flex', flexDirection:'column', gap:6,
         alignItems: isUser ? 'flex-end' : 'flex-start',
       }}>
-        {/* Bubble */}
         <div style={{
           padding:'12px 16px',
           borderRadius: isUser ? '20px 20px 4px 20px' : '4px 20px 20px 20px',
@@ -857,12 +960,10 @@ function MsgBubble({ msg, initial, showAvatar }: { msg: MsgType; initial: string
           )}
         </div>
 
-        {/* Timestamp */}
         <div style={{ fontSize:10, color:'#C0BEB8', padding:'0 4px' }}>
-          {time}
+          {formatTime()}
         </div>
 
-        {/* Disclaimer */}
         {!isUser && msg.showDisclaimer && (
           <div style={{
             padding:'8px 12px',
@@ -874,7 +975,6 @@ function MsgBubble({ msg, initial, showAvatar }: { msg: MsgType; initial: string
           </div>
         )}
 
-        {/* CTA */}
         {!isUser && msg.cta && (
           <div style={{ display:'flex', flexDirection:'column', gap:6, width:'100%' }}>
             <a href={msg.cta.url} target="_blank" rel="noopener noreferrer"

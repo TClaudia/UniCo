@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { AvatarCharacter, DEFAULT_AVATAR_CONFIG, AvatarConfig } from '@/components/avatar/AvatarCharacter'
+import { AvatarEngine } from '@/components/avatar/AvatarEngine'
 
 interface Step0Props {
   isClient: boolean
@@ -11,15 +10,6 @@ interface Step0Props {
 }
 
 export function Step0Welcome({ isClient, onChange, onNext }: Step0Props) {
-  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(DEFAULT_AVATAR_CONFIG)
-
-  useEffect(() => {
-    try {
-      const s = localStorage.getItem('uc_avatar_config')
-      if (s) setAvatarConfig(JSON.parse(s))
-    } catch {}
-  }, [])
-
   const handleSelect = (val: boolean) => {
     onChange(val)
     setTimeout(onNext, 200)
@@ -45,7 +35,7 @@ export function Step0Welcome({ isClient, onChange, onNext }: Step0Props) {
             className="absolute inset-0 rounded-full blur-2xl opacity-30"
             style={{ background: 'radial-gradient(circle, #E30613 0%, transparent 70%)', transform: 'scale(1.2)' }}
           />
-          <AvatarCharacter config={avatarConfig} emotion="idea" size="lg" />
+          <AvatarEngine emotion="enthusiastic" size="lg" />
         </motion.div>
 
         {/* Title */}

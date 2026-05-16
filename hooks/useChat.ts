@@ -2,15 +2,14 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { ChatMessage, LLMResponse } from '@/types'
+import { ChatMessage, LLMResponse, AvatarEmotion } from '@/types'
 import { getProfile } from '@/lib/storage'
 import { saveConversation, StoredConversation } from '@/lib/storage'
 import { addPoints, unlockBadge } from '@/lib/gamification'
-import type { CharacterEmotion } from '@/components/avatar/AvatarCharacter'
 
 interface UseChatReturn {
   messages: ChatMessage[]
-  emotion: CharacterEmotion
+  emotion: AvatarEmotion
   isLoading: boolean
   currentConversationId: string
   sendMessage: (content: string) => Promise<void>
@@ -25,18 +24,6 @@ const WELCOME_MESSAGE: ChatMessage = {
   showDisclaimer: false,
 }
 
-function mapAvatarEmotion(emotion: string): CharacterEmotion {
-  const map: Record<string, CharacterEmotion> = {
-    happy: 'happy',
-    thinking: 'thinking',
-    concerned: 'empathetic',
-    enthusiastic: 'idea',
-    celebrating: 'happy',
-    informative: 'thinking',
-  }
-  return (map[emotion] as CharacterEmotion) ?? 'idle'
-}
-
 function deriveTitle(messages: ChatMessage[]): string {
   const first = messages.find(m => m.role === 'user')
   if (!first) return 'Conversație nouă'
@@ -47,7 +34,7 @@ function deriveTitle(messages: ChatMessage[]): string {
 
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE])
-  const [emotion, setEmotion] = useState<CharacterEmotion>('idle')
+  const [emotion, setEmotion] = useState<AvatarEmotion>('happy')
   const [isLoading, setIsLoading] = useState(false)
   const [convId, setConvId] = useState<string>(() => uuidv4())
   const isFirstMessageRef = useRef(true)
@@ -111,7 +98,7 @@ export function useChat(): UseChatReturn {
 
       const data: LLMResponse = await response.json()
 
-      setEmotion(mapAvatarEmotion(data.avatar_emotion ?? 'happy'))
+      setEmotion((data.avatar_emotion ?? 'happy') as AvatarEmotion)
 
       const assistantMsg: ChatMessage = {
         id: uuidv4(),
@@ -140,7 +127,7 @@ export function useChat(): UseChatReturn {
         addPoints(10)
       }
 
-      setTimeout(() => setEmotion('listening'), 4000)
+      setTimeout(() => setEmotion('happy'), 4000)
     } catch (err) {
       console.error('[useChat] error:', err)
 
@@ -154,7 +141,7 @@ export function useChat(): UseChatReturn {
       const withError = [...messagesRef.current, errorMsg]
       messagesRef.current = withError
       setMessages(withError)
-      setEmotion('empathetic')
+      setEmotion('concerned')
     } finally {
       setIsLoading(false)
     }
@@ -166,7 +153,7 @@ export function useChat(): UseChatReturn {
     setConvId(newId)
     messagesRef.current = [WELCOME_MESSAGE]
     setMessages([WELCOME_MESSAGE])
-    setEmotion('idle')
+    setEmotion('happy')
     isFirstMessageRef.current = true
   }, [])
 
@@ -175,7 +162,7 @@ export function useChat(): UseChatReturn {
     setConvId(conv.id)
     messagesRef.current = conv.messages
     setMessages(conv.messages)
-    setEmotion('listening')
+    setEmotion('happy')
     isFirstMessageRef.current = false
   }, [])
 
