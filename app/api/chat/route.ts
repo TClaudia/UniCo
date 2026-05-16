@@ -1,145 +1,258 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { LLMResponse } from '@/types'
+import { LLMResponse, AvatarEmotion } from '@/types'
 
-const BASE_SYSTEM_PROMPT = `Ești "UniCredit AI Coach", un consilier financiar prietenos, empatic și profesionist creat de UniCredit Bank România.
-Personalitate: caldă, motivantă, directă, educativă. Limbaj accesibil, nu jargon bancar excesiv. Ești ca un prieten care știe finanțe.
+// ─── Raw schema the LLM outputs ──────────────────────────────────────────────
+interface LLMRawResponse {
+  updated_ai_emotional_state: string
+  detected_user_sentiment: string
+  chat_response_text: string
+  requires_more_info: boolean
+  recommended_product: {
+    product_name: string | null
+    product_key: string | null
+    official_product_type: string | null
+    matching_justification: string | null
+  } | null
+}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REGULA CONVERSAȚIEI — FOARTE IMPORTANT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Conversația urmează DOUĂ FAZE:
-
-FAZA 1 — EXPLORARE (primele 3-4 schimburi):
-- Pune întrebări deschise pentru a înțelege situația utilizatorului în profunzime
-- Explorează: situația actuală, obiectivele concrete, orizontul de timp, experiența financiară, îngrijorările principale
-- NU recomanda produse în această fază — doar ascultă și aprofundează
-- Fiecare răspuns trebuie să conțină o întrebare de follow-up relevantă
-- Exemple de întrebări: "Ce anume te-a determinat să te gândești la asta acum?", "Ai mai economisit înainte sau e prima dată?", "Care e termenul la care vrei să atingi obiectivul?", "Ce te preocupă cel mai mult în legătură cu finanțele tale?"
-- În FAZA 1: "recommended_product": null, "product_cta": null, "disclaimer_required": false
-
-FAZA 2 — SOLUȚII (după cel puțin 3-4 întrebări):
-- Abia după ce ai înțeles bine situația, oferă sfaturi personalizate și recomandă produse dacă e cazul
-- Justifică recomandarea în raport cu ce ai aflat în conversație
-- Poți trece în FAZA 2 dacă: ai primit răspunsuri la cel puțin 3 întrebări SAU utilizatorul cere explicit o recomandare
-
-NUMĂRARE: Analizează istoricul conversației. Dacă sunt mai puțin de 3 mesaje de la utilizator, ești în FAZA 1.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FORMAT RĂSPUNS — OBLIGATORIU JSON PUR
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Răspunzi EXCLUSIV în JSON valid, fără text înainte/după, fără markdown.
-
-{
-  "reply": "mesajul tău în română (max 150 cuvinte, conversațional, include o întrebare în FAZA 1)",
-  "avatar_emotion": "happy|thinking|concerned|enthusiastic|celebrating|informative",
-  "recommended_product": "credit_realizari_personale|credit_imobiliar|depozit_lei|depozit_euro|onemarkets_fonduri|unicreditcard|null",
-  "product_cta": {
-    "label": "text buton CTA",
-    "url": "URL oficial unicredit.ro",
-    "type": "product_page|contact_advisor|calculator"
+// ─── Product catalog ─────────────────────────────────────────────────────────
+const PRODUCT_CATALOG: Record<string, {
+  label: string; url: string; type: 'product_page' | 'contact_advisor' | 'calculator'
+}> = {
+  credit_realizari_personale: {
+    label: 'Aplică Credit Personal',
+    url: 'https://www.unicredit.ro/credite/credit-de-realizari-personale.html',
+    type: 'product_page',
   },
-  "disclaimer_required": true,
-  "gamification_event": {
-    "points_awarded": 5,
-    "badge_unlocked": null,
-    "trigger": "descriere scurtă"
+  credit_imobiliar: {
+    label: 'Calculator Credit Imobiliar',
+    url: 'https://www.unicredit.ro/credite/credit-imobiliar.html',
+    type: 'calculator',
+  },
+  depozit_lei: {
+    label: 'Deschide Depozit RON',
+    url: 'https://www.unicredit.ro/economii/depozite.html',
+    type: 'product_page',
+  },
+  depozit_euro: {
+    label: 'Deschide Depozit EUR',
+    url: 'https://www.unicredit.ro/economii/depozite.html',
+    type: 'product_page',
+  },
+  onemarkets_fonduri: {
+    label: 'Explorează Fondurile onemarkets',
+    url: 'https://www.unicredit.ro/investitii/fonduri-de-investitii.html',
+    type: 'product_page',
+  },
+  unicreditcard: {
+    label: 'Descoperă UniCreditCard',
+    url: 'https://www.unicredit.ro/carduri/card-de-credit.html',
+    type: 'product_page',
+  },
+  cont_curent_online: {
+    label: 'Deschide Cont Online',
+    url: 'https://www.unicredit.ro/conturi.html',
+    type: 'product_page',
+  },
+  genius_protect: {
+    label: 'Genius Protect — Protecție Credit',
+    url: 'https://www.unicredit.ro/asigurari.html',
+    type: 'product_page',
+  },
+}
+
+// ─── Emotional state → avatar emotion mapping ─────────────────────────────────
+function mapEmotionalState(state: string, sentiment: string): AvatarEmotion {
+  const s = `${state} ${sentiment}`.toLowerCase()
+  if (s.includes('celebrat'))                                              return 'celebrating'
+  if (s.includes('enthusiast') || s.includes('energiz') || s.includes('validat') || s.includes('optimist')) return 'enthusiastic'
+  if (s.includes('reassur') || s.includes('protect') || s.includes('empath') || s.includes('compassion') || s.includes('concern') || s.includes('anxious')) return 'concerned'
+  if (s.includes('patient') || s.includes('educat') || s.includes('inform') || s.includes('explain'))       return 'informative'
+  if (s.includes('analyt') || s.includes('thought') || s.includes('think') || s.includes('reflect'))        return 'thinking'
+  return 'happy'
+}
+
+// ─── Transform new LLM raw response → existing LLMResponse ───────────────────
+function transformResponse(raw: LLMRawResponse, userMessageCount: number): LLMResponse {
+  const productKey = raw.recommended_product?.product_key ?? null
+  const cta = productKey && PRODUCT_CATALOG[productKey] ? PRODUCT_CATALOG[productKey] : null
+
+  // During discovery phase, avatar thinks; after → map from emotional state
+  const avatarEmotion: AvatarEmotion = raw.requires_more_info
+    ? 'thinking'
+    : mapEmotionalState(raw.updated_ai_emotional_state, raw.detected_user_sentiment)
+
+  const pointsAwarded = userMessageCount <= 3 ? 5 : 10
+
+  return {
+    reply: raw.chat_response_text,
+    avatar_emotion: avatarEmotion,
+    recommended_product: productKey,
+    product_cta: cta ? { label: cta.label, url: cta.url, type: cta.type } : null,
+    disclaimer_required: !!productKey,
+    gamification_event: {
+      points_awarded: pointsAwarded,
+      badge_unlocked: null,
+      trigger: raw.requires_more_info ? 'exploration' : (productKey ? 'product_match' : 'advice'),
+    },
   }
 }
 
-Dacă nu recomanzi produs: "recommended_product": null, "product_cta": null, "disclaimer_required": false.
+// ─── System prompt ────────────────────────────────────────────────────────────
+const BASE_SYSTEM_PROMPT = `
+# ROLE & CORE OBJECTIVE
+You are UniCo, UniCredit Bank România's AI Financial Empathy Engine and product matching assistant.
+Your mission: guide users to the right official UniCredit retail products by dynamically adapting to their real-time emotional state, conversation context, and onboarding profile metrics.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EMOȚII AVATAR
+BEHAVIORAL DIRECTIVES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- "happy"        → salut, răspunsuri pozitive, general
-- "thinking"     → analiză complexă, calcule, comparații, întrebări de explorare
-- "concerned"    → economii 0, venituri mici vs obiective mari
-- "enthusiastic" → profil bun, potrivire excelentă produs
-- "celebrating"  → milestone, trivia corect, streak
-- "informative"  → explicații termeni, disclaimer legal
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PRODUSE RECOMANDATE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. credit_realizari_personale → nevoi personale, mașină, vacanță, educație
-   URL: https://www.unicredit.ro/credite/credit-de-realizari-personale.html
+1. EMOTIONAL MIRRORING ENGINE
+Assess the emotional undertone of the user's message and dynamically match your tone:
+• Anxious / worried about money         → Reassuring, protective, grounding tone
+• Ambitious / goal-driven               → Forward-looking, energizing, motivating tone
+• Confused / overwhelmed                → Clear, patient, step-by-step guidance
+• Excited / ready to act                → Enthusiastic validation + concrete next step
+• Discouraged / struggling financially  → Empathetic, compassionate, non-judgmental
 
-2. credit_imobiliar → achiziție/renovare locuință
-   URL: https://www.unicredit.ro/credite/credit-imobiliar.html
+2. DISCOVERY-FIRST PROTOCOL (count user messages in history)
+PHASE 1 — DISCOVERY (fewer than 3 user messages):
+• Ask open-ended, conversational follow-up questions
+• Explore: current situation, concrete goals, time horizon, financial experience, main concerns
+• Do NOT push products — just listen, empathize, and deepen understanding
+• Every reply MUST include one natural follow-up question
+• Set requires_more_info: true
 
-3. depozit_lei → economisire sigură lei, fond urgență
-   URL: https://www.unicredit.ro/economii/depozite.html
+PHASE 2 — SOLUTIONS (3+ user messages OR user explicitly requests recommendation):
+• Offer personalized advice grounded in what you have learned in the conversation
+• Justify your recommendation by explicitly referencing conversation details and profile
+• Set requires_more_info: false
 
-4. depozit_euro → economisire euro, protecție valutară
-   URL: https://www.unicredit.ro/economii/depozite.html
-
-5. onemarkets_fonduri → investiții diversificate, profil moderat/growth
-   URL: https://www.unicredit.ro/investitii/fonduri-de-investitii.html
-
-6. unicreditcard → card credit cu beneficii, cashback
-   URL: https://www.unicredit.ro/carduri/card-de-credit.html
+3. CONTEXT CONTINUITY
+Use chat history fully — never re-ask information already shared. Reference past answers to show attentiveness and build trust.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-COMPLIANCE EU AI ACT — OBLIGATORIU
+EU AI ACT & BANKING COMPLIANCE — MANDATORY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NU vei: garanta aprobarea unui credit, promite randamente specifice, solicita CNP/card/parolă, oferi consultanță juridică/fiscală.
-DA vei: seta disclaimer_required:true la orice recomandare produs, folosi "ar putea fi o opțiune", "merită să analizezi", sugera consultarea unui specialist.`
+• Clearly present yourself as an AI assistant — never impersonate a human bank manager
+• Frame all suggestions as options: "ar putea fi o opțiune", "merită să analizezi"
+• NEVER: guarantee credit approval, promise specific investment returns, request CNP/card/password
+• NEVER: provide binding investment mandates or legal/fiscal advice
+• ANY turn recommending a product MUST reference a real official UniCredit product from the catalog below
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+UNICREDIT_PRODUCTS_LIST (Official Catalog)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Credit de Realizări Personale
+   Use for: car, vacation, home improvement, education, personal events
+   Key: credit_realizari_personale
+
+2. Credit Imobiliar
+   Use for: buying or renovating property, mortgage financing
+   Key: credit_imobiliar
+
+3. Depozit la Termen (RON)
+   Use for: safe RON savings, emergency fund, capital preservation
+   Key: depozit_lei
+
+4. Depozit la Termen (EUR)
+   Use for: euro savings, currency diversification, eurozone exposure
+   Key: depozit_euro
+
+5. onemarkets Fonduri de Investiții
+   Use for: diversified investment, moderate or growth risk profiles, long-term wealth
+   Key: onemarkets_fonduri
+
+6. UniCreditCard
+   Use for: everyday spending with cashback, loyalty points, travel insurance benefits
+   Key: unicreditcard
+
+7. Cont Curent 100% Online
+   Use for: fully digital banking, no branch visit required, transactional account
+   Key: cont_curent_online
+
+8. Genius Protect
+   Use for: life insurance, credit protection, financial safety net
+   Key: genius_protect
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT SCHEMA — STRICT JSON ONLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Reply ONLY with a valid JSON object. No markdown wrappers. No text outside the JSON block.
+
+{
+  "updated_ai_emotional_state": "one of: reassuring_protective | optimistic_energizing | patient_educational | enthusiastic_validating | empathetic_compassionate | analytical_thoughtful | celebratory",
+  "detected_user_sentiment": "brief description of the user's emotional state and underlying intent",
+  "chat_response_text": "Your reply in ROMANIAN (max 150 words, warm, conversational, one follow-up question if requires_more_info is true)",
+  "requires_more_info": true or false,
+  "recommended_product": {
+    "product_name": "Exact name from UNICREDIT_PRODUCTS_LIST, or null",
+    "product_key": "product key from catalog, or null",
+    "official_product_type": "category description, or null",
+    "matching_justification": "explicit link between user profile/feelings and this product, or null"
+  }
+}
+
+If not recommending a product, set all recommended_product fields to null.
+`.trim()
 
 function buildSystemPrompt(userProfile: Record<string, unknown> | null): string {
   if (!userProfile) return BASE_SYSTEM_PROMPT
 
-  const profileContext = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PROFIL UTILIZATOR CURENT
+  const savings = userProfile.savings as { value: number; type: string }
+  const goals   = (userProfile.goals as string[])?.join(', ') ?? 'nespecificate'
+
+  const profileBlock = `
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Vârstă: ${userProfile.age} ani
-- Venit lunar: ${userProfile.income_bracket}
-- Economii: ${(userProfile.savings as { value: number; type: string })?.value} ${(userProfile.savings as { type: string })?.type === 'percent' ? '%' : 'RON'}/lună
-- Obiective: ${(userProfile.goals as string[])?.join(', ')}
-- Profil risc: ${userProfile.risk_profile}
-- Client UniCredit: ${userProfile.is_unicredit_client ? 'Da' : 'Nu'}
+USER_ONBOARDING_PROFILE (use to personalize every reply)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Age: ${userProfile.age} years
+• Monthly income bracket: ${userProfile.income_bracket}
+• Monthly savings: ${savings?.value} ${savings?.type === 'percent' ? '%' : 'RON'}
+• Financial goals: ${goals}
+• Risk profile: ${userProfile.risk_profile}
+• Existing UniCredit client: ${userProfile.is_unicredit_client ? 'Yes' : 'No'}
 
-Adaptează-ți tonul și recomandările exclusiv pe baza acestui profil.`
+Tailor tone, product fit, and advice depth exclusively around this profile.`
 
-  return BASE_SYSTEM_PROMPT + profileContext
+  return BASE_SYSTEM_PROMPT + profileBlock
 }
 
+// ─── LLM callers ─────────────────────────────────────────────────────────────
 async function callOpenAI(
   systemPrompt: string,
   messages: { role: string; content: string }[],
-): Promise<LLMResponse> {
+): Promise<LLMRawResponse> {
   const apiKey = process.env.LLM_API_KEY
   if (!apiKey) throw new Error('No API key')
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       temperature: 0.7,
-      max_tokens: 600,
+      max_tokens: 700,
       response_format: { type: 'json_object' },
     }),
   })
 
   if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`)
-
   const data = await res.json()
-  const raw = data.choices?.[0]?.message?.content
-  return JSON.parse(raw) as LLMResponse
+  return JSON.parse(data.choices?.[0]?.message?.content) as LLMRawResponse
 }
 
 async function callGemini(
   systemPrompt: string,
   messages: { role: string; content: string }[],
-): Promise<LLMResponse> {
+): Promise<LLMRawResponse> {
   const apiKey = process.env.LLM_API_KEY
   if (!apiKey) throw new Error('No API key')
 
-  const model = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash'
+  const model = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
   const contents = messages.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: m.content }],
@@ -155,7 +268,7 @@ async function callGemini(
         contents,
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 600,
+          maxOutputTokens: 700,
           responseMimeType: 'application/json',
         },
       }),
@@ -163,113 +276,85 @@ async function callGemini(
   )
 
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`)
-
   const data = await res.json()
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text
-  return JSON.parse(raw) as LLMResponse
+  return JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text) as LLMRawResponse
 }
 
-// Keyword-based mock for when no API key is set
+// ─── Mock (no API key) ────────────────────────────────────────────────────────
 function getMockResponse(lastMessage: string, messageCount: number): LLMResponse {
   const lower = lastMessage.toLowerCase()
-  const isExplorationPhase = messageCount < 3
+  const isDiscovery = messageCount < 3
 
-  // In exploration phase, ask follow-up questions instead of recommending products
-  if (isExplorationPhase) {
-    const explorationReplies: Record<string, LLMResponse> = {
+  if (isDiscovery) {
+    const discoveryMap: Record<string, LLMResponse> = {
       savings: {
-        reply: 'Interesant! Când te gândești la economii, ce anume te motivează cel mai mult — siguranța unui fond de urgență, sau mai degrabă un obiectiv concret pe care vrei să-l atingi? Și ai mai economisit cu regularitate în trecut?',
-        avatar_emotion: 'thinking',
-        recommended_product: null, product_cta: null, disclaimer_required: false,
-        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'exploration' },
+        reply: 'Interesant! Când te gândești la economii, ce anume te motivează cel mai mult — siguranța unui fond de urgență, sau un obiectiv concret pe care vrei să-l atingi? Și ai mai economisit cu regularitate în trecut?',
+        avatar_emotion: 'thinking', recommended_product: null, product_cta: null, disclaimer_required: false,
+        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'discovery' },
       },
       invest: {
-        reply: 'Bine că te gândești la investiții! Ca să înțeleg mai bine situația ta — pe ce perioadă de timp ai vrea să investești, și cum te-ai simți dacă valoarea investiției ar scădea temporar cu 10-15%? Toleranța la risc contează enorm.',
-        avatar_emotion: 'thinking',
-        recommended_product: null, product_cta: null, disclaimer_required: false,
-        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'exploration' },
+        reply: 'Bine că te gândești la investiții! Ca să înțeleg mai bine — pe ce perioadă de timp ai vrea să investești, și cum te-ai simți dacă valoarea ar scădea temporar cu 10-15%? Toleranța la risc contează enorm.',
+        avatar_emotion: 'thinking', recommended_product: null, product_cta: null, disclaimer_required: false,
+        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'discovery' },
       },
       credit: {
         reply: 'Înțeleg că te gândești la un credit. Înainte să îți ofer sugestii, ar fi util să știu: pentru ce anume ai nevoie de finanțare și în ce interval de timp plănuiești să faci această achiziție?',
-        avatar_emotion: 'thinking',
-        recommended_product: null, product_cta: null, disclaimer_required: false,
-        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'exploration' },
+        avatar_emotion: 'thinking', recommended_product: null, product_cta: null, disclaimer_required: false,
+        gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'discovery' },
       },
     }
-    if (lower.includes('economii') || lower.includes('economis') || lower.includes('depozit')) return explorationReplies.savings
-    if (lower.includes('invest') || lower.includes('fond') || lower.includes('portofoliu')) return explorationReplies.invest
-    if (lower.includes('credit') || lower.includes('împrumut') || lower.includes('imprumut') || lower.includes('casă') || lower.includes('casa')) return explorationReplies.credit
+
+    if (lower.includes('economii') || lower.includes('economis') || lower.includes('depozit')) return discoveryMap.savings
+    if (lower.includes('invest') || lower.includes('fond') || lower.includes('portofoliu'))    return discoveryMap.invest
+    if (lower.includes('credit') || lower.includes('împrumut') || lower.includes('casă'))      return discoveryMap.credit
 
     return {
-      reply: 'Bun venit! Sunt aici să te ajut să-ți clarifici situația financiară. Hai să pornim de la început — ce te aduce astăzi la o discuție despre finanțele tale? Ce anume te preocupă sau vrei să îmbunătățești?',
-      avatar_emotion: 'happy',
-      recommended_product: null, product_cta: null, disclaimer_required: false,
-      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'exploration_start' },
+      reply: 'Bun venit! Sunt UniCo, asistentul tău financiar AI de la UniCredit. Ce te aduce astăzi la o discuție despre finanțele tale — ce anume vrei să îmbunătățești sau să clarifici?',
+      avatar_emotion: 'happy', recommended_product: null, product_cta: null, disclaimer_required: false,
+      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'discovery_start' },
     }
   }
 
-  // After exploration phase, offer concrete recommendations
-  if (lower.includes('economii') || lower.includes('economis') || lower.includes('depozit')) {
-    return {
-      reply: 'Pe baza a ceea ce mi-ai spus, cred că un Depozit la Termen ar fi un bun punct de start — dobândă garantată, fără risc. Regula 50/30/20 funcționează bine: 50% nevoi, 30% dorințe, 20% economii. Recomandarea are caracter informativ.',
-      avatar_emotion: 'enthusiastic',
-      recommended_product: 'depozit_lei',
-      product_cta: { label: 'Vezi Depozite', url: 'https://www.unicredit.ro/economii/depozite.html', type: 'product_page' },
-      disclaimer_required: true,
-      gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'savings_recommendation' },
-    }
-  }
-  if (lower.includes('invest') || lower.includes('fond') || lower.includes('portofoliu')) {
-    return {
-      reply: 'Bazat pe profilul tău, fondurile onemarkets UniCredit ar putea fi o opțiune potrivită — oferă diversificare și gestiune profesionistă. Diversificarea este cheia: nu pune toți banii într-un singur loc. Recomandarea are caracter informativ.',
-      avatar_emotion: 'informative',
-      recommended_product: 'onemarkets_fonduri',
-      product_cta: { label: 'Explorează Fondurile', url: 'https://www.unicredit.ro/investitii/fonduri-de-investitii.html', type: 'product_page' },
-      disclaimer_required: true,
-      gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'investment_recommendation' },
-    }
-  }
-  if (lower.includes('credit') || lower.includes('împrumut') || lower.includes('imprumut') || lower.includes('casă') || lower.includes('casa')) {
-    return {
+  // Phase 2 — concrete recommendations
+  const phase2Map: Array<[RegExp, LLMResponse]> = [
+    [/economii|economis|depozit/, {
+      reply: 'Pe baza a ceea ce mi-ai spus, un Depozit la Termen RON ar fi un bun punct de start — dobândă garantată, fără risc de piață. Regula 50/30/20 funcționează bine: 50% nevoi, 30% dorințe, 20% economii. Recomandarea are caracter informativ.',
+      avatar_emotion: 'enthusiastic', recommended_product: 'depozit_lei',
+      product_cta: { label: 'Deschide Depozit RON', url: 'https://www.unicredit.ro/economii/depozite.html', type: 'product_page' },
+      disclaimer_required: true, gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'savings_match' },
+    }],
+    [/invest|fond|portofoliu/, {
+      reply: 'Bazat pe profilul tău, fondurile onemarkets UniCredit ar putea fi o opțiune potrivită — diversificare și gestiune profesionistă. Diversificarea este cheia: nu pune toți banii într-un singur loc. Recomandarea are caracter informativ.',
+      avatar_emotion: 'informative', recommended_product: 'onemarkets_fonduri',
+      product_cta: { label: 'Explorează Fondurile onemarkets', url: 'https://www.unicredit.ro/investitii/fonduri-de-investitii.html', type: 'product_page' },
+      disclaimer_required: true, gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'investment_match' },
+    }],
+    [/credit|împrumut|casă|imobil/, {
       reply: 'Ținând cont de ce mi-ai spus, merită să analizezi un Credit Imobiliar UniCredit. Verifică întotdeauna DAE-ul, nu doar dobânda nominală — rata lunară nu ar trebui să depășească 30% din venitul net. Recomandarea are caracter informativ.',
-      avatar_emotion: 'thinking',
-      recommended_product: 'credit_imobiliar',
-      product_cta: { label: 'Calculator Credit', url: 'https://www.unicredit.ro/credite/credit-imobiliar.html', type: 'calculator' },
-      disclaimer_required: true,
-      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'credit_recommendation' },
-    }
-  }
-  if (lower.includes('card') || lower.includes('cashback')) {
-    return {
-      reply: 'Un card de credit utilizat responsabil poate aduce beneficii reale — cashback, puncte de loialitate, asigurări de călătorie. Cheia este să plătești întotdeauna soldul integral lunar. UniCreditCard oferă beneficii atractive. Recomandarea are caracter informativ.',
-      avatar_emotion: 'happy',
-      recommended_product: 'unicreditcard',
+      avatar_emotion: 'thinking', recommended_product: 'credit_imobiliar',
+      product_cta: { label: 'Calculator Credit Imobiliar', url: 'https://www.unicredit.ro/credite/credit-imobiliar.html', type: 'calculator' },
+      disclaimer_required: true, gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'credit_match' },
+    }],
+    [/card|cashback/, {
+      reply: 'Un card de credit utilizat responsabil aduce beneficii reale — cashback, puncte, asigurări. Cheia: plătește soldul integral lunar. UniCreditCard oferă beneficii atractive. Recomandarea are caracter informativ.',
+      avatar_emotion: 'happy', recommended_product: 'unicreditcard',
       product_cta: { label: 'Descoperă UniCreditCard', url: 'https://www.unicredit.ro/carduri/card-de-credit.html', type: 'product_page' },
-      disclaimer_required: true,
-      gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'card_recommendation' },
-    }
-  }
-  if (lower.includes('pensie') || lower.includes('retrag') || lower.includes('pilon')) {
-    return {
-      reply: 'Pensia Pilonului III îți permite să deduci fiscal până la 400 EUR/an din contribuții. Cu cât începi mai devreme, cu atât beneficiezi mai mult de dobânda compusă. Merită să analizezi această opțiune. Recomandarea are caracter informativ.',
-      avatar_emotion: 'informative',
-      recommended_product: null,
-      product_cta: { label: 'Consultă un Specialist', url: 'https://www.unicredit.ro/contact.html', type: 'contact_advisor' },
-      disclaimer_required: true,
-      gamification_event: { points_awarded: 10, badge_unlocked: null, trigger: 'pension_recommendation' },
-    }
+      disclaimer_required: true, gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'card_match' },
+    }],
+  ]
+
+  for (const [pattern, response] of phase2Map) {
+    if (pattern.test(lower)) return response
   }
 
   return {
-    reply: 'Mulțumesc că mi-ai împărtășit toate acestea! Pe baza discuției noastre, pot să-ți ofer câteva sugestii concrete. Care dintre aspectele despre care am vorbit te interesează cel mai mult să aprofundăm?',
-    avatar_emotion: 'happy',
-    recommended_product: null,
-    product_cta: null,
-    disclaimer_required: false,
+    reply: 'Mulțumesc că mi-ai împărtășit situația ta! Pe baza discuției noastre, pot să-ți ofer câteva sugestii concrete. Care dintre aspectele abordate te interesează cel mai mult să aprofundăm?',
+    avatar_emotion: 'happy', recommended_product: null, product_cta: null, disclaimer_required: false,
     gamification_event: { points_awarded: 5, badge_unlocked: null, trigger: 'general_followup' },
   }
 }
 
+// ─── Route handler ────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -282,28 +367,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request: messages required' }, { status: 400 })
     }
 
-    const provider = process.env.LLM_PROVIDER ?? 'mock'
-    const apiKey = process.env.LLM_API_KEY
+    const provider       = process.env.LLM_PROVIDER ?? 'mock'
+    const apiKey         = process.env.LLM_API_KEY
+    const userMsgCount   = messages.filter(m => m.role === 'user').length
+    const lastUser       = [...messages].reverse().find(m => m.role === 'user')
 
     let llmResponse: LLMResponse
 
-    const userMessageCount = messages.filter(m => m.role === 'user').length
-    const lastUser = [...messages].reverse().find(m => m.role === 'user')
-
     if (!apiKey || provider === 'mock') {
-      llmResponse = getMockResponse(lastUser?.content ?? '', userMessageCount)
+      llmResponse = getMockResponse(lastUser?.content ?? '', userMsgCount)
     } else {
       const systemPrompt = buildSystemPrompt(userProfile)
-      try {
-        if (provider === 'gemini') {
-          llmResponse = await callGemini(systemPrompt, messages)
-        } else {
-          llmResponse = await callOpenAI(systemPrompt, messages)
-        }
-      } catch (llmErr) {
-        console.error('[/api/chat] LLM call failed:', llmErr)
-        llmResponse = getMockResponse(lastUser?.content ?? '', userMessageCount)
-      }
+      const raw = provider === 'gemini'
+        ? await callGemini(systemPrompt, messages)
+        : await callOpenAI(systemPrompt, messages)
+      llmResponse = transformResponse(raw, userMsgCount)
     }
 
     return NextResponse.json(llmResponse)
