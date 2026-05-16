@@ -221,6 +221,100 @@ Tailor tone, product fit, and advice depth exclusively around this profile.`
 }
 
 // ─── LLM callers ─────────────────────────────────────────────────────────────
+
+// Collects all Gemini API keys from env: LLM_API_KEY, GEMINI_API_KEY_2 … GEMINI_API_KEY_20
+function getGeminiKeys(): string[] {
+  const keys: string[] = []
+  if (process.env.LLM_API_KEY) keys.push(process.env.LLM_API_KEY)
+  for (let i = 2; i <= 20; i++) {
+    const k = process.env[`GEMINI_API_KEY_${i}`]
+    if (k) keys.push(k)
+  }
+  return keys
+}
+
+async function callGeminiWithKey(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  messages: { role: string; content: string }[],
+): Promise<LLMRawResponse> {
+  const contents = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }))
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1500,
+          responseMimeType: 'application/json',
+        },
+      }),
+    },
+  )
+
+  if (!res.ok) {
+    const body = await res.text()
+    const err = new Error(`Gemini ${res.status}: ${body}`) as Error & { status: number }
+    err.status = res.status
+    throw err
+  }
+
+  const data = await res.json()
+
+  // Gemini 2.5 Flash returns thinking tokens as parts with `thought: true`.
+  // The actual JSON output is in the first part WITHOUT that flag.
+  const parts: Array<{ text?: string; thought?: boolean }> =
+    data.candidates?.[0]?.content?.parts ?? []
+  const outputPart = parts.find(p => !p.thought)
+  const raw = outputPart?.text ?? ''
+
+  try {
+    return JSON.parse(raw) as LLMRawResponse
+  } catch {
+    const finishReason = data.candidates?.[0]?.finishReason ?? 'unknown'
+    throw new Error(`Gemini returned invalid JSON (finishReason=${finishReason}, ${raw.length} chars): ${raw.slice(0, 300)}`)
+  }
+}
+
+async function callGemini(
+  systemPrompt: string,
+  messages: { role: string; content: string }[],
+): Promise<LLMRawResponse> {
+  const keys = getGeminiKeys()
+  if (keys.length === 0) throw new Error('No Gemini API key configured')
+
+  const model = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+
+  // Random start index — safe for serverless (no shared state needed)
+  const start = Math.floor(Math.random() * keys.length)
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[(start + i) % keys.length]
+    try {
+      return await callGeminiWithKey(key, model, systemPrompt, messages)
+    } catch (err) {
+      const status = (err as Error & { status?: number }).status
+      // Only retry on rate-limit errors; propagate everything else immediately
+      if (status === 429 || (err instanceof Error && err.message.includes('RESOURCE_EXHAUSTED'))) {
+        console.warn(`[callGemini] Key #${(start + i) % keys.length + 1} rate-limited (429), trying next key`)
+        continue
+      }
+      throw err
+    }
+  }
+
+  throw new Error('All Gemini API keys are rate-limited (429). Add more keys or wait a moment.')
+}
+
 async function callOpenAI(
   systemPrompt: string,
   messages: { role: string; content: string }[],
@@ -243,41 +337,6 @@ async function callOpenAI(
   if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`)
   const data = await res.json()
   return JSON.parse(data.choices?.[0]?.message?.content) as LLMRawResponse
-}
-
-async function callGemini(
-  systemPrompt: string,
-  messages: { role: string; content: string }[],
-): Promise<LLMRawResponse> {
-  const apiKey = process.env.LLM_API_KEY
-  if (!apiKey) throw new Error('No API key')
-
-  const model = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
-  const contents = messages.map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }))
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 700,
-          responseMimeType: 'application/json',
-        },
-      }),
-    },
-  )
-
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`)
-  const data = await res.json()
-  return JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text) as LLMRawResponse
 }
 
 // ─── Mock (no API key) ────────────────────────────────────────────────────────
